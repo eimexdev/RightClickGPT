@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const focusExistingTab = document.getElementById('focusExistingTab');
 
   // Load saved values
-  chrome.storage.local.get(['promptFormat', 'chatID', 'focusExistingTab'], (data) => {
+  chrome.storage.local.get(['promptFormat', 'chatID', 'chatURL', 'focusExistingTab'], (data) => {
     if (data.promptFormat) {
       promptFormat.value = data.promptFormat;
       currentPromptFormat.innerText = data.promptFormat;
@@ -16,10 +16,13 @@ document.addEventListener('DOMContentLoaded', () => {
       promptFormat.value = defaultPromptFormat;
       currentPromptFormat.innerText = defaultPromptFormat;
     }
-    if (data.chatID) {
-      chatID.value = data.chatID;
-      currentChatID.innerText = data.chatID;
+
+    const savedChatTarget = data.chatURL || data.chatID || '';
+    if (savedChatTarget) {
+      chatID.value = savedChatTarget;
+      currentChatID.innerText = savedChatTarget;
     }
+
     if (data.focusExistingTab !== undefined) {
       focusExistingTab.checked = data.focusExistingTab;
     } else {
@@ -36,14 +39,33 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set(
       {
         promptFormat: promptFormat.value,
-        chatID: chatID.value,
+        chatID: chatID.value.trim(),
+        chatURL: normalizeChatTarget(chatID.value),
         focusExistingTab: focusExistingTab.checked
       },
       () => {
         currentPromptFormat.innerText = promptFormat.value;
-        currentChatID.innerText = chatID.value;
+        currentChatID.innerText = chatID.value.trim();
         alert('Settings saved');
       }
     );
   });
 });
+
+function normalizeChatTarget(rawValue) {
+  const value = rawValue.trim();
+  if (!value) {
+    return '';
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.hostname === 'chatgpt.com' || url.hostname === 'chat.openai.com') {
+      return url.toString();
+    }
+  } catch (error) {
+    // Bare legacy chat IDs are normalized by the background script.
+  }
+
+  return value;
+}

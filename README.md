@@ -8,6 +8,7 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 - Configurable prompt format and ChatGPT chat ID.
 - Option to use an existing ChatGPT tab if available.
 - Popup for easy configuration of settings.
+- Uses ChatGPT's prompt URL for fresh chats, with UI automation only for existing or configured chats.
 
 ## Installation
 
@@ -32,8 +33,8 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 1. Click on the RightClickGPT icon in the Chrome toolbar to open the popup.
 2. In the popup, you can:
    - Enter a custom prompt format and include `<prompt>` where you want the selected text to appear.
-   - Enter the ChatGPT chat ID.
-   - Toggle the option to focus on an existing ChatGPT tab if available.
+  - Optionally enter a ChatGPT chat URL or legacy chat ID.
+  - Toggle the option to focus on an existing ChatGPT tab if available.
 3. Click "Save" to save your settings.
 
 ## Files
@@ -45,4 +46,3 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 - `options.js`: The JavaScript file for handling popup interactions.
 - `content.js`: The content script that interacts with the ChatGPT page (if needed).
 - `logo16.png, logo48.png, logo128.png`: Extension Icons
-
