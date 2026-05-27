@@ -56,6 +56,7 @@
     }
 
     input[type="text"],
+    select,
     textarea {
       width: 100%;
       padding: 9px 11px;
@@ -75,6 +76,14 @@
     input[type="text"]::placeholder,
     textarea::placeholder {
       color: #777;
+    }
+
+    select {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
     }
 
     .preset-list {
@@ -210,6 +219,14 @@
     </div>
 
     <div class="field">
+      <label for="chatProvider">Chat provider</label>
+      <select id="chatProvider">
+        <option value="chatgpt">ChatGPT</option>
+        <option value="t3">t3.chat (beta)</option>
+      </select>
+    </div>
+
+    <div class="field">
       <label for="chatID">Conversation URL</label>
       <input type="text" id="chatID" placeholder="https://chatgpt.com/c/...">
       <p class="hint">Optional. Leave blank to start a new chat each time.</p>
@@ -217,7 +234,7 @@
     </div>
 
     <div class="toggle-row">
-      <label for="focusExistingTab">Use existing ChatGPT tab</label>
+      <label for="focusExistingTab" id="focusExistingTabLabel">Use existing ChatGPT tab</label>
       <input type="checkbox" id="focusExistingTab">
     </div>
 

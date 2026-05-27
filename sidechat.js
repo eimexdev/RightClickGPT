@@ -29,6 +29,7 @@ function loadSidechat() {
     if (!sidechatURL) {
       chatFrame.classList.add('hidden');
       emptyState.classList.remove('hidden');
+      emptyState.innerText = 'Use a Sidechat preset from the right-click menu.';
       status.classList.add('hidden');
       openTab.href = 'https://chatgpt.com/';
       return;

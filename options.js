@@ -4,19 +4,34 @@ const DEFAULT_PROMPT_PRESET = {
   promptFormat: 'Explain <prompt>',
   sidechat: false,
 };
+const DEFAULT_CHAT_PROVIDER = 'chatgpt';
+const CHAT_PROVIDERS = {
+  chatgpt: {
+    chatTargetPlaceholder: 'https://chatgpt.com/c/...',
+    existingTabLabel: 'Use existing ChatGPT tab',
+  },
+  t3: {
+    chatTargetPlaceholder: 'https://t3.chat/chat/...',
+    existingTabLabel: 'Use existing t3.chat tab',
+  },
+};
 
 document.addEventListener('DOMContentLoaded', () => {
   const presetList = document.getElementById('presetList');
   const addPresetButton = document.getElementById('addPreset');
+  const chatProvider = document.getElementById('chatProvider');
   const chatID = document.getElementById('chatID');
   const saveButton = document.getElementById('save');
   const currentPromptFormat = document.getElementById('currentPromptFormat');
   const currentChatID = document.getElementById('currentChatID');
   const focusExistingTab = document.getElementById('focusExistingTab');
+  const focusExistingTabLabel = document.getElementById('focusExistingTabLabel');
 
-  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'focusExistingTab'], (data) => {
+  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab'], (data) => {
     renderPresets(getPromptPresets(data));
     updateCurrentPromptSummary();
+    chatProvider.value = getChatProviderId(data.chatProvider);
+    updateProviderUI();
 
     const savedChatTarget = data.chatURL || data.chatID || '';
     if (savedChatTarget) {
@@ -30,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
       focusExistingTab.checked = false;
     }
   });
+
+  chatProvider.addEventListener('change', updateProviderUI);
 
   addPresetButton.addEventListener('click', () => {
     addPreset({
@@ -58,8 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
       {
         promptPresets,
         promptFormat: promptPresets[0].promptFormat,
+        chatProvider: getChatProviderId(chatProvider.value),
         chatID: chatID.value.trim(),
-        chatURL: normalizeChatTarget(chatID.value),
+        chatURL: normalizeChatTarget(chatID.value, chatProvider.value),
         focusExistingTab: focusExistingTab.checked
       },
       () => {
@@ -148,6 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
       .map((preset) => `${preset.name || 'Untitled'}: ${preset.promptFormat || 'No prompt format'}`)
       .join(' | ');
   }
+
+  function updateProviderUI() {
+    const provider = getChatProvider(chatProvider.value);
+    chatID.placeholder = provider.chatTargetPlaceholder;
+    focusExistingTabLabel.innerText = provider.existingTabLabel;
+  }
 });
 
 function getPromptPresets(data) {
@@ -174,15 +198,28 @@ function createPresetId() {
   return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function normalizeChatTarget(rawValue) {
+function getChatProviderId(providerId) {
+  return CHAT_PROVIDERS[providerId] ? providerId : DEFAULT_CHAT_PROVIDER;
+}
+
+function getChatProvider(providerId) {
+  return CHAT_PROVIDERS[getChatProviderId(providerId)];
+}
+
+function normalizeChatTarget(rawValue, providerId) {
   const value = rawValue.trim();
   if (!value) {
     return '';
   }
 
+  const provider = getChatProviderId(providerId);
+
   try {
     const url = new URL(value);
-    if (url.hostname === 'chatgpt.com' || url.hostname === 'chat.openai.com') {
+    if (
+      (provider === 't3' && url.hostname === 't3.chat') ||
+      (provider === 'chatgpt' && (url.hostname === 'chatgpt.com' || url.hostname === 'chat.openai.com'))
+    ) {
       return url.toString();
     }
   } catch (error) {

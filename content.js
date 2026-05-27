@@ -5,15 +5,23 @@
 
   window.__rightClickGPTContentScriptLoaded = true;
 
-  const COMPOSER_SELECTORS = [
+  const CHATGPT_COMPOSER_SELECTORS = [
     '#prompt-textarea[contenteditable="true"]',
     '[role="textbox"][aria-label="Chat with ChatGPT"]',
     'textarea[aria-label="Chat with ChatGPT"]',
     'textarea',
   ];
-  const SEND_BUTTON_SELECTORS = [
+  const CHATGPT_SEND_BUTTON_SELECTORS = [
     'button[data-testid="send-button"]',
     'button[aria-label="Send prompt"]',
+  ];
+  const T3_COMPOSER_SELECTORS = [
+    '[role="textbox"][aria-label="Message input"]',
+    'textarea[aria-label="Message input"]',
+    '[contenteditable="true"][aria-label="Message input"]',
+  ];
+  const T3_SEND_BUTTON_SELECTORS = [
+    'button[aria-label="Send message"]',
   ];
   const WAIT_TIMEOUT_MS = 15000;
   const WAIT_INTERVAL_MS = 100;
@@ -27,13 +35,20 @@
   }
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action !== 'sendToChatGPT' && request.action !== 'ensureChatGPTPromptSubmitted') {
+    const supportedActions = [
+      'sendToChatGPT',
+      'ensureChatGPTPromptSubmitted',
+      'sendToChatProvider',
+      'ensureChatProviderPromptSubmitted',
+    ];
+    if (!supportedActions.includes(request.action)) {
       return false;
     }
 
-    const task = request.action === 'sendToChatGPT'
-      ? sendPromptToChatGPT(request.prompt)
-      : ensurePromptSubmitted(request.prompt);
+    const provider = request.provider || 'chatgpt';
+    const task = request.action === 'sendToChatGPT' || request.action === 'sendToChatProvider'
+      ? sendPromptToProvider(request.prompt, provider)
+      : ensurePromptSubmitted(request.prompt, provider);
 
     task
       .then(() => sendResponse({ ok: true }))
@@ -46,27 +61,27 @@
     return true;
   });
 
-  const framedPrompt = window.top !== window && isChatGPTURL() ? getPromptParamFromCurrentURL() : '';
+  const framedPrompt = window.top !== window && isSupportedProviderURL() ? getPromptParamFromCurrentURL() : '';
   if (framedPrompt) {
-    ensurePromptSubmitted(framedPrompt).catch((error) => {
+    ensurePromptSubmitted(framedPrompt, getCurrentProviderId()).catch((error) => {
       const message = error && error.message ? error.message : String(error);
       logToBackground('RightClickGPT sidechat failed:', message);
     });
   }
 
-  async function sendPromptToChatGPT(prompt) {
-    const composer = await waitForElement(findComposer, 'ChatGPT composer');
+  async function sendPromptToProvider(prompt, provider) {
+    const composer = await waitForElement(() => findComposer(provider), `${getProviderLabel(provider)} composer`);
     await insertPrompt(composer, prompt);
 
-    await submitPrompt(composer);
+    await submitPrompt(composer, provider);
   }
 
-  async function ensurePromptSubmitted(prompt) {
-    if (await waitForPromptInConversation(prompt, 2500)) {
+  async function ensurePromptSubmitted(prompt, provider) {
+    if (await waitForPromptInConversation(prompt, 2500, provider)) {
       return;
     }
 
-    const composer = await waitForElement(findComposer, 'ChatGPT composer');
+    const composer = await waitForElement(() => findComposer(provider), `${getProviderLabel(provider)} composer`);
     if (!getComposerText(composer) && !currentURLHasPromptParam()) {
       return;
     }
@@ -75,11 +90,11 @@
       insertPrompt(composer, prompt);
     }
 
-    await submitPrompt(composer);
+    await submitPrompt(composer, provider);
   }
 
-  function findComposer() {
-    for (const selector of COMPOSER_SELECTORS) {
+  function findComposer(provider) {
+    for (const selector of getComposerSelectors(provider)) {
       const element = document.querySelector(selector);
       if (element && isVisible(element)) {
         return element;
@@ -89,8 +104,8 @@
     return null;
   }
 
-  function findEnabledSendButton() {
-    for (const selector of SEND_BUTTON_SELECTORS) {
+  function findEnabledSendButton(provider) {
+    for (const selector of getSendButtonSelectors(provider)) {
       const button = document.querySelector(selector);
       if (button && isVisible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
         return button;
@@ -100,8 +115,8 @@
     return null;
   }
 
-  function findSendButton() {
-    for (const selector of SEND_BUTTON_SELECTORS) {
+  function findSendButton(provider) {
+    for (const selector of getSendButtonSelectors(provider)) {
       const button = document.querySelector(selector);
       if (button && isVisible(button)) {
         return button;
@@ -139,35 +154,44 @@
     });
   }
 
-  async function submitPrompt(composer) {
+  async function submitPrompt(composer, provider) {
     const beforeSubmitText = getComposerText(composer);
-    const sendButton = await waitForElement(findEnabledSendButton, 'enabled ChatGPT send button');
+
+    if (provider === 't3') {
+      pressEnterToSubmit(composer);
+
+      if (await waitForPromptToSubmit(composer, beforeSubmitText, 1200, provider)) {
+        return;
+      }
+    }
+
+    const sendButton = await waitForElement(() => findEnabledSendButton(provider), `enabled ${getProviderLabel(provider)} send button`);
 
     clickButtonLikeAUser(sendButton);
 
-    if (await waitForPromptToSubmit(composer, beforeSubmitText, 1200)) {
+    if (await waitForPromptToSubmit(composer, beforeSubmitText, 1200, provider)) {
       return;
     }
 
     requestFormSubmit(sendButton);
 
-    if (await waitForPromptToSubmit(composer, beforeSubmitText, 1200)) {
+    if (await waitForPromptToSubmit(composer, beforeSubmitText, 1200, provider)) {
       return;
     }
 
     pressEnterToSubmit(composer);
 
-    if (await waitForPromptToSubmit(composer, beforeSubmitText, SUBMIT_TIMEOUT_MS)) {
+    if (await waitForPromptToSubmit(composer, beforeSubmitText, SUBMIT_TIMEOUT_MS, provider)) {
       return;
     }
 
-    const currentButton = findSendButton();
+    const currentButton = findSendButton(provider);
     if (currentButton && !currentButton.disabled && currentButton.getAttribute('aria-disabled') !== 'true') {
       currentButton.click();
     }
 
-    if (!(await waitForPromptToSubmit(composer, beforeSubmitText, 1500))) {
-      throw new Error('Prompt was inserted, but ChatGPT did not submit it.');
+    if (!(await waitForPromptToSubmit(composer, beforeSubmitText, 1500, provider))) {
+      throw new Error(`Prompt was inserted, but ${getProviderLabel(provider)} did not submit it.`);
     }
   }
 
@@ -244,12 +268,12 @@
     }
   }
 
-  function waitForPromptToSubmit(composer, submittedText, timeout) {
+  function waitForPromptToSubmit(composer, submittedText, timeout, provider) {
     const startedAt = Date.now();
 
     return new Promise((resolve) => {
       const check = () => {
-        const sendButton = findSendButton();
+        const sendButton = findSendButton(provider);
         const currentText = getComposerText(composer);
         const submitButtonChanged = sendButton && sendButton.getAttribute('aria-label') !== 'Send prompt';
 
@@ -270,12 +294,12 @@
     });
   }
 
-  function waitForPromptInConversation(prompt, timeout) {
+  function waitForPromptInConversation(prompt, timeout, provider) {
     const startedAt = Date.now();
 
     return new Promise((resolve) => {
       const check = () => {
-        if (textAppearsOutsideComposer(prompt)) {
+        if (textAppearsOutsideComposer(prompt, provider)) {
           resolve(true);
           return;
         }
@@ -292,8 +316,8 @@
     });
   }
 
-  function textAppearsOutsideComposer(text) {
-    const composer = findComposer();
+  function textAppearsOutsideComposer(text, provider) {
+    const composer = findComposer(provider);
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 
     while (walker.nextNode()) {
@@ -326,13 +350,38 @@
     }
   }
 
-  function isChatGPTURL() {
+  function getCurrentProviderId() {
     try {
       const hostname = new URL(window.location.href).hostname;
-      return hostname === 'chatgpt.com' || hostname === 'chat.openai.com';
+      if (hostname === 't3.chat') {
+        return 't3';
+      }
+
+      return 'chatgpt';
+    } catch (error) {
+      return 'chatgpt';
+    }
+  }
+
+  function isSupportedProviderURL() {
+    try {
+      const hostname = new URL(window.location.href).hostname;
+      return hostname === 'chatgpt.com' || hostname === 'chat.openai.com' || hostname === 't3.chat';
     } catch (error) {
       return false;
     }
+  }
+
+  function getComposerSelectors(provider) {
+    return provider === 't3' ? T3_COMPOSER_SELECTORS : CHATGPT_COMPOSER_SELECTORS;
+  }
+
+  function getSendButtonSelectors(provider) {
+    return provider === 't3' ? T3_SEND_BUTTON_SELECTORS : CHATGPT_SEND_BUTTON_SELECTORS;
+  }
+
+  function getProviderLabel(provider) {
+    return provider === 't3' ? 't3.chat' : 'ChatGPT';
   }
 
   function getComposerText(element) {

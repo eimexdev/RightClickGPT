@@ -21,7 +21,7 @@
     "default_path": "sidechat.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://chatgpt.com https://chat.openai.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://chatgpt.com https://chat.openai.com https://t3.chat;"
   },
   "declarative_net_request": {
     "rule_resources": [
@@ -39,6 +39,13 @@
 	"16": "logo16.png"
   },
   "content_scripts": [
+    {
+      "matches": ["https://t3.chat/*"],
+      "js": ["t3-bridge.js"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
