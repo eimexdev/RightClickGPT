@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentChatID = document.getElementById('currentChatID');
   const focusExistingTab = document.getElementById('focusExistingTab');
   const focusExistingTabLabel = document.getElementById('focusExistingTabLabel');
+  let saveTimeout;
+  let isLoadingSettings = true;
 
   chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab'], (data) => {
     renderPresets(getPromptPresets(data));
@@ -44,9 +46,20 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       focusExistingTab.checked = false;
     }
+
+    isLoadingSettings = false;
   });
 
-  chatProvider.addEventListener('change', updateProviderUI);
+  chatProvider.addEventListener('change', () => {
+    updateProviderUI();
+    scheduleSaveSettings();
+  });
+  chatID.addEventListener('input', scheduleSaveSettings);
+  focusExistingTab.addEventListener('change', scheduleSaveSettings);
+
+  if (saveButton) {
+    saveButton.hidden = true;
+  }
 
   addPresetButton.addEventListener('click', () => {
     addPreset({
@@ -55,19 +68,27 @@ document.addEventListener('DOMContentLoaded', () => {
       promptFormat: 'Explain <prompt>',
       sidechat: false,
     });
+    scheduleSaveSettings();
   });
 
-  saveButton.addEventListener('click', () => {
+  function scheduleSaveSettings() {
+    if (isLoadingSettings) {
+      return;
+    }
+
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveSettings, 300);
+  }
+
+  function saveSettings() {
     const promptPresets = readPresets();
     const invalidPreset = promptPresets.find((preset) => !preset.name || !preset.promptFormat.includes('<prompt>'));
 
     if (invalidPreset) {
-      alert('Each preset needs a name and a prompt format that includes <prompt>.');
       return;
     }
 
     if (!promptPresets.length) {
-      alert('Add at least one preset.');
       return;
     }
 
@@ -83,10 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
       () => {
         updateCurrentPromptSummary();
         currentChatID.innerText = chatID.value.trim();
-        alert('Settings saved');
       }
     );
-  });
+  }
 
   function renderPresets(presets) {
     presetList.innerHTML = '';
@@ -115,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
       row.remove();
       updateRemoveButtons();
       updateCurrentPromptSummary();
+      scheduleSaveSettings();
     });
 
     header.append(nameInput, removeButton);
@@ -139,8 +160,15 @@ document.addEventListener('DOMContentLoaded', () => {
     row.append(header, formatInput, sidechatRow);
     presetList.append(row);
 
-    nameInput.addEventListener('input', updateCurrentPromptSummary);
-    formatInput.addEventListener('input', updateCurrentPromptSummary);
+    nameInput.addEventListener('input', () => {
+      updateCurrentPromptSummary();
+      scheduleSaveSettings();
+    });
+    formatInput.addEventListener('input', () => {
+      updateCurrentPromptSummary();
+      scheduleSaveSettings();
+    });
+    sidechatInput.addEventListener('change', scheduleSaveSettings);
     updateRemoveButtons();
   }
 
