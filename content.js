@@ -46,6 +46,14 @@
     return true;
   });
 
+  const framedPrompt = window.top !== window && isChatGPTURL() ? getPromptParamFromCurrentURL() : '';
+  if (framedPrompt) {
+    ensurePromptSubmitted(framedPrompt).catch((error) => {
+      const message = error && error.message ? error.message : String(error);
+      logToBackground('RightClickGPT sidechat failed:', message);
+    });
+  }
+
   async function sendPromptToChatGPT(prompt) {
     const composer = await waitForElement(findComposer, 'ChatGPT composer');
     await insertPrompt(composer, prompt);
@@ -305,6 +313,23 @@
   function currentURLHasPromptParam() {
     try {
       return new URL(window.location.href).searchParams.has('q');
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function getPromptParamFromCurrentURL() {
+    try {
+      return new URL(window.location.href).searchParams.get('q') || '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function isChatGPTURL() {
+    try {
+      const hostname = new URL(window.location.href).hostname;
+      return hostname === 'chatgpt.com' || hostname === 'chat.openai.com';
     } catch (error) {
       return false;
     }

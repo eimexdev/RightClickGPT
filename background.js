@@ -4,13 +4,21 @@ const CHATGPT_TAB_URLS = [
   'https://chatgpt.com/*',
   'https://chat.openai.com/*',
 ];
+const ROOT_MENU_ID = 'chatgpt';
+const DEFAULT_PROMPT_PRESET = {
+  id: 'default',
+  name: 'Explain command',
+  promptFormat: 'Explain <prompt>',
+  sidechat: false,
+};
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'chatgpt',
-    title: 'Ask ChatGPT',
-    contexts: ['selection'],
-  });
+chrome.runtime.onInstalled.addListener(updateContextMenus);
+chrome.runtime.onStartup.addListener(updateContextMenus);
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && (changes.promptPresets || changes.promptFormat)) {
+    updateContextMenus();
+  }
 });
 
 chrome.runtime.onMessage.addListener((request) => {
@@ -19,15 +27,29 @@ chrome.runtime.onMessage.addListener((request) => {
   }
 });
 
-chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId !== 'chatgpt' || !info.selectionText) {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!info.selectionText) {
     return;
   }
 
-  chrome.storage.local.get(['promptFormat', 'chatID', 'chatURL', 'focusExistingTab'], (data) => {
-    const promptFormat = data.promptFormat || 'Explain <prompt>';
+  if (isSidechatMenuItem(info.menuItemId)) {
+    openSidechatPanel(tab);
+  }
+
+  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'focusExistingTab'], (data) => {
+    const preset = findPresetForMenuItem(info.menuItemId, data);
+    if (!preset) {
+      return;
+    }
+
+    const promptFormat = preset.promptFormat;
     const formattedPrompt = promptFormat.replace('<prompt>', info.selectionText);
     const configuredChatURL = normalizeChatURL(data.chatURL || data.chatID || '');
+
+    if (preset.sidechat) {
+      updateSidechatPrompt(formattedPrompt, tab);
+      return;
+    }
 
     if (data.focusExistingTab) {
       sendToExistingChatGPTTab(formattedPrompt, (sentToExistingTab) => {
@@ -43,6 +65,85 @@ chrome.contextMenus.onClicked.addListener((info) => {
     openPromptTarget(configuredChatURL, formattedPrompt);
   });
 });
+
+function updateContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.storage.local.get(['promptPresets', 'promptFormat'], (data) => {
+      const presets = getPromptPresets(data);
+      if (presets.length <= 1) {
+        chrome.contextMenus.create({
+          id: getMenuItemId(presets[0]),
+          title: presets[0].name || 'Ask ChatGPT',
+          contexts: ['selection'],
+        });
+        return;
+      }
+
+      chrome.contextMenus.create({
+        id: ROOT_MENU_ID,
+        title: 'Ask ChatGPT',
+        contexts: ['selection'],
+      });
+
+      presets.forEach((preset) => {
+        chrome.contextMenus.create({
+          id: getMenuItemId(preset),
+          parentId: ROOT_MENU_ID,
+          title: preset.name,
+          contexts: ['selection'],
+        });
+      });
+    });
+  });
+}
+
+function findPresetForMenuItem(menuItemId, data) {
+  const presets = getPromptPresets(data);
+  if (menuItemId === ROOT_MENU_ID && presets.length === 1) {
+    return presets[0];
+  }
+
+  const presetId = getPresetIdFromMenuItem(menuItemId);
+  return presets.find((preset) => preset.id === presetId);
+}
+
+function getPromptPresets(data) {
+  if (Array.isArray(data.promptPresets)) {
+    const presets = data.promptPresets
+      .map(normalizePromptPreset)
+      .filter((preset) => preset.name && preset.promptFormat.includes('<prompt>'));
+
+    if (presets.length) {
+      return presets;
+    }
+  }
+
+  return [{
+    ...DEFAULT_PROMPT_PRESET,
+    promptFormat: data.promptFormat || DEFAULT_PROMPT_PRESET.promptFormat,
+  }];
+}
+
+function normalizePromptPreset(preset, index) {
+  return {
+    id: String(preset.id || `preset-${index}`),
+    name: String(preset.name || '').trim(),
+    promptFormat: String(preset.promptFormat || ''),
+    sidechat: Boolean(preset.sidechat),
+  };
+}
+
+function getMenuItemId(preset) {
+  return `chatgpt-preset-${preset.sidechat ? 'sidechat' : 'tab'}-${preset.id}`;
+}
+
+function isSidechatMenuItem(menuItemId) {
+  return String(menuItemId).startsWith('chatgpt-preset-sidechat-');
+}
+
+function getPresetIdFromMenuItem(menuItemId) {
+  return String(menuItemId).replace(/^chatgpt-preset-(sidechat|tab)-/, '').replace(/^chatgpt-preset-/, '');
+}
 
 function sendToExistingChatGPTTab(prompt, callback) {
   chrome.tabs.query({ url: CHATGPT_TAB_URLS }, (tabs) => {
@@ -72,6 +173,44 @@ function openPromptTarget(configuredChatURL, prompt) {
   }
 
   createNewTabAndInject(CHATGPT_HOME_URL, prompt);
+}
+
+function openSidechatPanel(tab) {
+  if (!chrome.sidePanel || !tab || !tab.id) {
+    setSidechatError('Chrome side panel is not available for this page.');
+    return;
+  }
+
+  try {
+    const openPanel = chrome.sidePanel.open({ tabId: tab.id });
+    if (openPanel && typeof openPanel.catch === 'function') {
+      openPanel.catch((error) => {
+        console.error(error);
+        setSidechatError(error && error.message ? error.message : String(error));
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    setSidechatError(error && error.message ? error.message : String(error));
+  }
+}
+
+function updateSidechatPrompt(prompt, tab) {
+  const chatURL = buildPromptQueryURL(prompt);
+
+  chrome.storage.local.set({
+    sidechatPrompt: prompt,
+    sidechatURL: chatURL,
+    sidechatError: chrome.sidePanel && tab && tab.id ? '' : 'Chrome side panel is not available for this page.',
+    sidechatUpdatedAt: Date.now(),
+  });
+}
+
+function setSidechatError(message) {
+  chrome.storage.local.set({
+    sidechatError: message,
+    sidechatUpdatedAt: Date.now(),
+  });
 }
 
 function buildPromptQueryURL(prompt) {

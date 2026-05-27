@@ -5,7 +5,8 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 ## Features
 
 - Right-click context menu integration.
-- Configurable prompt format and ChatGPT chat ID.
+- Configurable prompt presets and ChatGPT chat ID.
+- Sidechat presets that open ChatGPT in Chrome's side panel.
 - Option to use an existing ChatGPT tab if available.
 - Popup for easy configuration of settings.
 - Uses ChatGPT's prompt URL for fresh chats, with UI automation only for existing or configured chats.
@@ -24,7 +25,7 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 
 1. Select the text on any webpage that you want to send to ChatGPT.
 2. Right-click on the selected text.
-3. Click on the "Ask ChatGPT" option in the context menu.
+3. Click the prompt preset you want to use. If you only have one preset, it appears directly in the context menu. If you have multiple presets, they appear under "Ask ChatGPT".
 4. The text will be sent to the configured ChatGPT chat.
 
 ### Popup Configuration Menu
@@ -32,7 +33,8 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 
 1. Click on the RightClickGPT icon in the Chrome toolbar to open the popup.
 2. In the popup, you can:
-   - Enter a custom prompt format and include `<prompt>` where you want the selected text to appear.
+   - Add one or more named prompt presets and include `<prompt>` where you want the selected text to appear.
+   - Turn on Sidechat for any preset that should open in Chrome's side panel.
   - Optionally enter a ChatGPT chat URL or legacy chat ID.
   - Toggle the option to focus on an existing ChatGPT tab if available.
 3. Click "Save" to save your settings.

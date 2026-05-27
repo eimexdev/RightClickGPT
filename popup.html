@@ -2,155 +2,230 @@
 <html>
 <head>
   <style>
-    html, body {
-    height: 100%;
-}
+    :root {
+      color-scheme: dark;
+      --bg: #1f1f1f;
+      --panel: #262626;
+      --field: #303030;
+      --field-border: #3a3a3a;
+      --text: #f4f4f4;
+      --muted: #a7a7a7;
+      --accent: #10a37f;
+    }
 
-html {
-  min-width: 700px;
-    display: table;
-    margin: none;
-}
+    * {
+      box-sizing: border-box;
+    }
 
+    html {
+      width: 380px;
+    }
 
     body {
-      font-family: Arial, sans-serif;
-      padding: 10px;
-      color: #9b9b9b;
-      background-color: #212121;
+      margin: 0;
+      padding: 14px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    
-    p {
-      font-family: ui-sans-serif,-apple-system,system-ui,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,Helvetica,Apple Color Emoji,Arial,Segoe UI Emoji,Segoe UI Symbol;
-      font-size: 15px;
-      line-height: 22.5px;
-      color: #9b9b9b;
-    }
-    h1 {
-      margin-bottom: 15px;
-      font-family: ui-sans-serif,-apple-system,system-ui,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,Helvetica,Apple Color Emoji,Arial,Segoe UI Emoji,Segoe UI Symbol;
-      color: #ffffff;
-      font-weight: 600;
-      text-align: center;
-    }
-    input[type="text"] {
-      width: 100%;
-      max-width: 48rem;
-      padding: 12px 20px;
-      margin: 8px 0;
-      color: #ffffff;
-      box-sizing: border-box;
-      border: 1px solid #2f2f2f;
-      border-radius: 26px;
-      background-color: #2f2f2f;
-    }
-    b {
-      color: #ffffff;
-    }
-    button { 
-      background-color: #ffffff;
-      border: 1px solid #ffffff;
-      color: #000000;
-      padding: 12px 20px;
-      text-align: center;
-      text-decoration: none;
-      display: inline-block;
-      font-size: 16px;
-      margin: 25px auto;
-      margin-bottom: 0px;
-      cursor: pointer;
-      border-radius: 9999px;
-      display: block;
-    }
-    
-    input[type="checkbox"] {
-    appearance: none;
-    background-color: #2f2f2f;
-    border-radius: 72px;
-    border-style: none;
-    flex-shrink: 0;
-    height: 20px;
-    margin: 0;
-    position: relative;
-    width: 30px;
-}
-input[type="checkbox"]::before {
-    bottom: -6px;
-    content: "";
-    left: -6px;
-    position: absolute;
-    right: -6px;
-    top: -6px;
-}
-input[type="checkbox"],
-input[type="checkbox"]::after {
-    transition: all 100ms ease-out;
-}
-input[type="checkbox"]::after {
-    background-color: #fff;
-    border-radius: 50%;
-    content: "";
-    height: 14px;
-    left: 3px;
-    position: absolute;
-    top: 3px;
-    width: 14px;
-}
-input[type="checkbox"] {
-    cursor: default;
-}
-input[type="checkbox"]:hover {
-    background-color: #2f2f2f;
-    transition-duration: 0s;
-}
-input[type="checkbox"]:checked {
-    background-color: #10A37F;
-}
-input[type="checkbox"]:checked::after {
-    background-color: #fff;
-    left: 13px;
-}
-input[type="checkbox"]:checked:hover {
-    background-color: #10A37F !important;
-    transition-duration: 0s;
-}
-input[type="checkbox"]:checked:hover::after {
-    background-color: #fff;
-    left: 13px;
-}
-input[type="checkbox"]:focus:not(.focus-visible) {
-    outline: 0;
-}
-input[type="checkbox"] {
-  scale: 1.5;
-  margin-top: 20px;
-  margin-left: 8px;
-}
 
-label.text-center.tb-checkbox span {
-    margin-left: 10px;
-    vertical-align: top;
-}
-    
+    main {
+      padding: 18px;
+      background: var(--panel);
+      border: 1px solid #343434;
+      border-radius: 12px;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .field {
+      margin: 0 0 14px;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 7px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid var(--field-border);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    textarea {
+      min-height: 68px;
+      resize: vertical;
+    }
+
+    input[type="text"]::placeholder,
+    textarea::placeholder {
+      color: #777;
+    }
+
+    .preset-list {
+      display: grid;
+      gap: 10px;
+      margin: 0 0 12px;
+    }
+
+    .preset {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #383838;
+      border-radius: 8px;
+      background: #2b2b2b;
+    }
+
+    .preset-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .preset-header input {
+      min-width: 0;
+    }
+
+    button.secondary {
+      width: auto;
+      padding: 8px 10px;
+      background: var(--field);
+      border: 1px solid var(--field-border);
+      color: var(--text);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .actions button {
+      flex: 1;
+    }
+
+    .hint,
+    .current {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .current span {
+      color: #d6d6d6;
+      overflow-wrap: anywhere;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 2px 0 18px;
+    }
+
+    .preset-toggle-row {
+      margin: 0;
+    }
+
+    .toggle-row label {
+      margin: 0;
+    }
+
+    input[type="checkbox"] {
+      appearance: none;
+      width: 36px;
+      height: 20px;
+      margin: 0;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--field);
+      border: 1px solid var(--field-border);
+      cursor: pointer;
+      position: relative;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    input[type="checkbox"]::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 120ms ease;
+    }
+
+    input[type="checkbox"]:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    input[type="checkbox"]:checked::after {
+      transform: translateX(16px);
+    }
+
+    button {
+      width: 100%;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: #fff;
+      color: #111;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+    }
   </style>
 </head>
 <body>
-    <h1>RightClickGPT Options</h1>
-    <p>Your custom prompt format must include<b> &lt;prompt&gt; </b>where you want the selected text to appear:</p>
-    <input type="text" id="promptFormat" placeholder='Ex: Explain &lt;prompt&gt;'>
+  <main>
+    <h1>RightClickGPT</h1>
 
-    <p>Current prompt format: <span id="currentPromptFormat"></span></p>
-    <br>
-    <p>Optional: enter a ChatGPT conversation URL to always send prompts to that chat:</p>
-    <input type="text" id="chatID" placeholder='Ex: https://chatgpt.com/c/a435cadd-b000-441f-b76c-900d9f441353'>
+    <div class="field">
+      <label>Prompt presets</label>
+      <div id="presetList" class="preset-list"></div>
+      <p class="hint">Include <b>&lt;prompt&gt;</b> where the selected text should go.</p>
+      <p class="current">Current: <span id="currentPromptFormat"></span></p>
+    </div>
 
-    <p>Current chat target: <span id="currentChatID"></span></p>
-    
-    <br>
-    <p>Use existing tab if available:</p>
-    <input type="checkbox" id="focusExistingTab">
-    <br>
-    <button id="save">Save</button>
-    <script src="options.js"></script>
-  </body>
-  </html>
+    <div class="field">
+      <label for="chatID">Conversation URL</label>
+      <input type="text" id="chatID" placeholder="https://chatgpt.com/c/...">
+      <p class="hint">Optional. Leave blank to start a new chat each time.</p>
+      <p class="current">Current: <span id="currentChatID"></span></p>
+    </div>
+
+    <div class="toggle-row">
+      <label for="focusExistingTab">Use existing ChatGPT tab</label>
+      <input type="checkbox" id="focusExistingTab">
+    </div>
+
+    <div class="actions">
+      <button type="button" id="addPreset" class="secondary">Add preset</button>
+      <button type="button" id="save">Save</button>
+    </div>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>
