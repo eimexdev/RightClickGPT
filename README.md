@@ -6,7 +6,8 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 
 - Right-click context menu integration.
 - Configurable prompt presets, chat provider, and conversation URL.
-- Sidechat presets that open the selected provider in Chrome's side panel.
+- A global default behavior for opening prompts in a new tab or Chrome's side panel.
+- Per-preset behavior overrides for Default, New tab, or Sidechat.
 - Option to use an existing provider tab if available.
 - Popup for easy configuration of settings.
 - Uses provider prompt URLs for fresh chats, with UI automation only for existing or configured chats where needed.
@@ -34,7 +35,8 @@ RightClickGPT is a Chrome extension that allows you to quickly send selected tex
 1. Click on the RightClickGPT icon in the Chrome toolbar to open the popup.
 2. In the popup, you can:
    - Add one or more named prompt presets and include `<prompt>` where you want the selected text to appear.
-   - Turn on Sidechat for any preset that should open in Chrome's side panel.
+   - Choose the default behavior: New tab or Sidechat.
+   - Set each preset to use the default behavior, New tab, or Sidechat.
    - Choose ChatGPT or t3.chat (beta) as the chat provider.
    - Optionally enter a conversation URL or legacy chat ID.
    - Toggle the option to focus on an existing provider tab if available.

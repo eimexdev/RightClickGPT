@@ -2,9 +2,12 @@ const DEFAULT_PROMPT_PRESET = {
   id: 'default',
   name: 'Explain command',
   promptFormat: 'Explain <prompt>',
-  sidechat: false,
+  behavior: 'default',
 };
 const DEFAULT_CHAT_PROVIDER = 'chatgpt';
+const DEFAULT_PROMPT_BEHAVIOR = 'newTab';
+const PROMPT_BEHAVIORS = ['default', 'newTab', 'sidechat'];
+const GLOBAL_PROMPT_BEHAVIORS = ['newTab', 'sidechat'];
 const CHAT_PROVIDERS = {
   chatgpt: {
     chatTargetPlaceholder: 'https://chatgpt.com/c/...',
@@ -21,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const addPresetButton = document.getElementById('addPreset');
   const chatProvider = document.getElementById('chatProvider');
   const chatID = document.getElementById('chatID');
+  const defaultPromptBehavior = document.getElementById('defaultPromptBehavior');
   const saveButton = document.getElementById('save');
   const currentPromptFormat = document.getElementById('currentPromptFormat');
   const currentChatID = document.getElementById('currentChatID');
@@ -29,10 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let saveTimeout;
   let isLoadingSettings = true;
 
-  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab'], (data) => {
+  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     renderPresets(getPromptPresets(data));
     updateCurrentPromptSummary();
     chatProvider.value = getChatProviderId(data.chatProvider);
+    defaultPromptBehavior.value = getGlobalPromptBehavior(data.defaultPromptBehavior);
     updateProviderUI();
 
     const savedChatTarget = data.chatURL || data.chatID || '';
@@ -54,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateProviderUI();
     scheduleSaveSettings();
   });
+  defaultPromptBehavior.addEventListener('change', scheduleSaveSettings);
   chatID.addEventListener('input', scheduleSaveSettings);
   focusExistingTab.addEventListener('change', scheduleSaveSettings);
 
@@ -66,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: createPresetId(),
       name: '',
       promptFormat: 'Explain <prompt>',
-      sidechat: false,
+      behavior: 'default',
     });
     scheduleSaveSettings();
   });
@@ -97,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         promptPresets,
         promptFormat: promptPresets[0].promptFormat,
         chatProvider: getChatProviderId(chatProvider.value),
+        defaultPromptBehavior: getGlobalPromptBehavior(defaultPromptBehavior.value),
         chatID: chatID.value.trim(),
         chatURL: normalizeChatTarget(chatID.value, chatProvider.value),
         focusExistingTab: focusExistingTab.checked
@@ -145,19 +152,28 @@ document.addEventListener('DOMContentLoaded', () => {
     formatInput.placeholder = 'Explain <prompt>';
     formatInput.value = preset.promptFormat || '';
 
-    const sidechatRow = document.createElement('div');
-    sidechatRow.className = 'toggle-row preset-toggle-row';
+    const behaviorRow = document.createElement('div');
+    behaviorRow.className = 'field preset-toggle-row';
 
-    const sidechatLabel = document.createElement('label');
-    sidechatLabel.innerText = 'Sidechat';
+    const behaviorLabel = document.createElement('label');
+    behaviorLabel.innerText = 'Behavior';
 
-    const sidechatInput = document.createElement('input');
-    sidechatInput.type = 'checkbox';
-    sidechatInput.className = 'preset-sidechat';
-    sidechatInput.checked = Boolean(preset.sidechat);
+    const behaviorInput = document.createElement('select');
+    behaviorInput.className = 'preset-behavior';
+    [
+      ['default', 'Default'],
+      ['newTab', 'New tab'],
+      ['sidechat', 'Sidechat'],
+    ].forEach(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.innerText = label;
+      behaviorInput.append(option);
+    });
+    behaviorInput.value = getPresetBehavior(preset);
 
-    sidechatRow.append(sidechatLabel, sidechatInput);
-    row.append(header, formatInput, sidechatRow);
+    behaviorRow.append(behaviorLabel, behaviorInput);
+    row.append(header, formatInput, behaviorRow);
     presetList.append(row);
 
     nameInput.addEventListener('input', () => {
@@ -168,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateCurrentPromptSummary();
       scheduleSaveSettings();
     });
-    sidechatInput.addEventListener('change', scheduleSaveSettings);
+    behaviorInput.addEventListener('change', scheduleSaveSettings);
     updateRemoveButtons();
   }
 
@@ -177,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: row.dataset.id || `preset-${index}`,
       name: row.querySelector('.preset-name').value.trim(),
       promptFormat: row.querySelector('.preset-format').value.trim(),
-      sidechat: row.querySelector('.preset-sidechat').checked,
+      behavior: getPresetBehavior({ behavior: row.querySelector('.preset-behavior').value }),
     }));
   }
 
@@ -208,7 +224,7 @@ function getPromptPresets(data) {
       id: String(preset.id || `preset-${index}`),
       name: String(preset.name || '').trim(),
       promptFormat: String(preset.promptFormat || ''),
-      sidechat: Boolean(preset.sidechat),
+      behavior: getPresetBehavior(preset),
     }));
   }
 
@@ -216,6 +232,18 @@ function getPromptPresets(data) {
     ...DEFAULT_PROMPT_PRESET,
     promptFormat: data.promptFormat || DEFAULT_PROMPT_PRESET.promptFormat,
   }];
+}
+
+function getPresetBehavior(preset) {
+  if (PROMPT_BEHAVIORS.includes(preset && preset.behavior)) {
+    return preset.behavior;
+  }
+
+  return preset && preset.sidechat ? 'sidechat' : 'default';
+}
+
+function getGlobalPromptBehavior(behavior) {
+  return GLOBAL_PROMPT_BEHAVIORS.includes(behavior) ? behavior : DEFAULT_PROMPT_BEHAVIOR;
 }
 
 function createPresetId() {
