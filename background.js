@@ -90,6 +90,10 @@ function updateContextMenus() {
     chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatProvider'], (data) => {
       const presets = getPromptPresets(data);
       const provider = getChatProvider(data.chatProvider);
+      if (!presets.length) {
+        return;
+      }
+
       if (presets.length <= 1) {
         chrome.contextMenus.create({
           id: getMenuItemId(presets[0]),
@@ -131,9 +135,9 @@ function getPromptPresets(data) {
   if (Array.isArray(data.promptPresets)) {
     const presets = data.promptPresets
       .map(normalizePromptPreset)
-      .filter((preset) => preset.name && preset.promptFormat.includes('<prompt>'));
+      .filter((preset) => preset.enabled && preset.name && preset.promptFormat.includes('<prompt>'));
 
-    if (presets.length) {
+    if (presets.length || data.promptPresets.length) {
       return presets;
     }
   }
@@ -150,6 +154,7 @@ function normalizePromptPreset(preset, index) {
     name: String(preset.name || '').trim(),
     promptFormat: String(preset.promptFormat || ''),
     behavior: getPresetBehavior(preset),
+    enabled: preset.enabled !== false,
   };
 }
 
