@@ -9,6 +9,9 @@ const CHATGPT_TAB_URLS = [
 const T3_TAB_URLS = ['https://t3.chat/*'];
 const ROOT_MENU_ID = 'chatgpt';
 const DEFAULT_CHAT_PROVIDER = 'chatgpt';
+const DEFAULT_PROMPT_BEHAVIOR = 'newTab';
+const PROMPT_BEHAVIORS = ['default', 'newTab', 'sidechat'];
+const GLOBAL_PROMPT_BEHAVIORS = ['newTab', 'sidechat'];
 const CHAT_PROVIDERS = {
   chatgpt: {
     homeURL: CHATGPT_HOME_URL,
@@ -27,14 +30,14 @@ const DEFAULT_PROMPT_PRESET = {
   id: 'default',
   name: 'Explain command',
   promptFormat: 'Explain <prompt>',
-  sidechat: false,
+  behavior: 'default',
 };
 
 chrome.runtime.onInstalled.addListener(updateContextMenus);
 chrome.runtime.onStartup.addListener(updateContextMenus);
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && (changes.promptPresets || changes.promptFormat || changes.chatProvider)) {
+  if (areaName === 'local' && (changes.promptPresets || changes.promptFormat || changes.chatProvider || changes.defaultPromptBehavior)) {
     updateContextMenus();
   }
 });
@@ -50,11 +53,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
 
-  if (isSidechatMenuItem(info.menuItemId)) {
-    openSidechatPanel(tab);
-  }
-
-  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab'], (data) => {
+  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     const preset = findPresetForMenuItem(info.menuItemId, data);
     if (!preset) {
       return;
@@ -65,7 +64,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const formattedPrompt = promptFormat.replace('<prompt>', info.selectionText);
     const configuredChatURL = normalizeChatURL(data.chatURL || data.chatID || '', provider.id);
 
-    if (preset.sidechat) {
+    if (getEffectivePromptBehavior(preset, data.defaultPromptBehavior) === 'sidechat') {
+      openSidechatPanel(tab);
       updateSidechatPrompt(formattedPrompt, tab, provider.id);
       return;
     }
@@ -90,6 +90,10 @@ function updateContextMenus() {
     chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatProvider'], (data) => {
       const presets = getPromptPresets(data);
       const provider = getChatProvider(data.chatProvider);
+      if (!presets.length) {
+        return;
+      }
+
       if (presets.length <= 1) {
         chrome.contextMenus.create({
           id: getMenuItemId(presets[0]),
@@ -131,9 +135,9 @@ function getPromptPresets(data) {
   if (Array.isArray(data.promptPresets)) {
     const presets = data.promptPresets
       .map(normalizePromptPreset)
-      .filter((preset) => preset.name && preset.promptFormat.includes('<prompt>'));
+      .filter((preset) => preset.enabled && preset.name && preset.promptFormat.includes('<prompt>'));
 
-    if (presets.length) {
+    if (presets.length || data.promptPresets.length) {
       return presets;
     }
   }
@@ -149,20 +153,33 @@ function normalizePromptPreset(preset, index) {
     id: String(preset.id || `preset-${index}`),
     name: String(preset.name || '').trim(),
     promptFormat: String(preset.promptFormat || ''),
-    sidechat: Boolean(preset.sidechat),
+    behavior: getPresetBehavior(preset),
+    enabled: preset.enabled !== false,
   };
 }
 
 function getMenuItemId(preset) {
-  return `chatgpt-preset-${preset.sidechat ? 'sidechat' : 'tab'}-${preset.id}`;
-}
-
-function isSidechatMenuItem(menuItemId) {
-  return String(menuItemId).startsWith('chatgpt-preset-sidechat-');
+  return `chatgpt-preset-${preset.id}`;
 }
 
 function getPresetIdFromMenuItem(menuItemId) {
   return String(menuItemId).replace(/^chatgpt-preset-(sidechat|tab)-/, '').replace(/^chatgpt-preset-/, '');
+}
+
+function getPresetBehavior(preset) {
+  if (PROMPT_BEHAVIORS.includes(preset && preset.behavior)) {
+    return preset.behavior;
+  }
+
+  return preset && preset.sidechat ? 'sidechat' : 'default';
+}
+
+function getGlobalPromptBehavior(behavior) {
+  return GLOBAL_PROMPT_BEHAVIORS.includes(behavior) ? behavior : DEFAULT_PROMPT_BEHAVIOR;
+}
+
+function getEffectivePromptBehavior(preset, defaultBehavior) {
+  return preset.behavior === 'default' ? getGlobalPromptBehavior(defaultBehavior) : preset.behavior;
 }
 
 function getChatProvider(providerId) {

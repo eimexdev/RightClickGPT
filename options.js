@@ -2,9 +2,12 @@ const DEFAULT_PROMPT_PRESET = {
   id: 'default',
   name: 'Explain command',
   promptFormat: 'Explain <prompt>',
-  sidechat: false,
+  behavior: 'default',
 };
 const DEFAULT_CHAT_PROVIDER = 'chatgpt';
+const DEFAULT_PROMPT_BEHAVIOR = 'newTab';
+const PROMPT_BEHAVIORS = ['default', 'newTab', 'sidechat'];
+const GLOBAL_PROMPT_BEHAVIORS = ['newTab', 'sidechat'];
 const CHAT_PROVIDERS = {
   chatgpt: {
     chatTargetPlaceholder: 'https://chatgpt.com/c/...',
@@ -21,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const addPresetButton = document.getElementById('addPreset');
   const chatProvider = document.getElementById('chatProvider');
   const chatID = document.getElementById('chatID');
+  const defaultPromptBehavior = document.getElementById('defaultPromptBehavior');
   const saveButton = document.getElementById('save');
   const currentPromptFormat = document.getElementById('currentPromptFormat');
   const currentChatID = document.getElementById('currentChatID');
@@ -29,10 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let saveTimeout;
   let isLoadingSettings = true;
 
-  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab'], (data) => {
+  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     renderPresets(getPromptPresets(data));
     updateCurrentPromptSummary();
     chatProvider.value = getChatProviderId(data.chatProvider);
+    defaultPromptBehavior.value = getGlobalPromptBehavior(data.defaultPromptBehavior);
     updateProviderUI();
 
     const savedChatTarget = data.chatURL || data.chatID || '';
@@ -54,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateProviderUI();
     scheduleSaveSettings();
   });
+  defaultPromptBehavior.addEventListener('change', scheduleSaveSettings);
   chatID.addEventListener('input', scheduleSaveSettings);
   focusExistingTab.addEventListener('change', scheduleSaveSettings);
 
@@ -66,8 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
       id: createPresetId(),
       name: '',
       promptFormat: 'Explain <prompt>',
-      sidechat: false,
-    });
+      behavior: 'default',
+      enabled: true,
+    }, { expanded: true });
     scheduleSaveSettings();
   });
 
@@ -82,7 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function saveSettings() {
     const promptPresets = readPresets();
-    const invalidPreset = promptPresets.find((preset) => !preset.name || !preset.promptFormat.includes('<prompt>'));
+    const enabledPresets = promptPresets.filter((preset) => preset.enabled);
+    const invalidPreset = enabledPresets.find((preset) => !preset.name || !preset.promptFormat.includes('<prompt>'));
 
     if (invalidPreset) {
       return;
@@ -95,8 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set(
       {
         promptPresets,
-        promptFormat: promptPresets[0].promptFormat,
+        promptFormat: (enabledPresets[0] || promptPresets[0]).promptFormat,
         chatProvider: getChatProviderId(chatProvider.value),
+        defaultPromptBehavior: getGlobalPromptBehavior(defaultPromptBehavior.value),
         chatID: chatID.value.trim(),
         chatURL: normalizeChatTarget(chatID.value, chatProvider.value),
         focusExistingTab: focusExistingTab.checked
@@ -110,16 +119,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderPresets(presets) {
     presetList.innerHTML = '';
-    presets.forEach(addPreset);
+    presets.forEach((preset) => addPreset(preset, { expanded: false }));
   }
 
-  function addPreset(preset) {
+  function addPreset(preset, options = {}) {
     const row = document.createElement('div');
     row.className = 'preset';
     row.dataset.id = preset.id || createPresetId();
+    row.setAttribute('aria-expanded', options.expanded ? 'true' : 'false');
 
     const header = document.createElement('div');
     header.className = 'preset-header';
+
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'preset-chevron';
+    toggleButton.setAttribute('aria-label', options.expanded ? 'Collapse preset' : 'Expand preset');
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
@@ -127,38 +142,95 @@ document.addEventListener('DOMContentLoaded', () => {
     nameInput.placeholder = 'Preset name';
     nameInput.value = preset.name || '';
 
-    const removeButton = document.createElement('button');
-    removeButton.type = 'button';
-    removeButton.className = 'secondary remove-preset';
-    removeButton.innerText = 'Remove';
-    removeButton.addEventListener('click', () => {
-      row.remove();
-      updateRemoveButtons();
-      updateCurrentPromptSummary();
-      scheduleSaveSettings();
-    });
+    const presetSummary = document.createElement('span');
+    presetSummary.className = 'preset-summary';
 
-    header.append(nameInput, removeButton);
+    const enabledLabel = document.createElement('label');
+    enabledLabel.className = 'preset-enabled-label';
+    enabledLabel.setAttribute('aria-label', 'Enable preset');
+
+    const enabledInput = document.createElement('input');
+    enabledInput.type = 'checkbox';
+    enabledInput.className = 'preset-enabled';
+    enabledInput.checked = preset.enabled !== false;
+    enabledLabel.append(enabledInput);
+
+    header.append(toggleButton, nameInput, presetSummary, enabledLabel);
 
     const formatInput = document.createElement('textarea');
     formatInput.className = 'preset-format';
     formatInput.placeholder = 'Explain <prompt>';
     formatInput.value = preset.promptFormat || '';
 
-    const sidechatRow = document.createElement('div');
-    sidechatRow.className = 'toggle-row preset-toggle-row';
+    const behaviorRow = document.createElement('div');
+    behaviorRow.className = 'field preset-toggle-row';
 
-    const sidechatLabel = document.createElement('label');
-    sidechatLabel.innerText = 'Sidechat';
+    const behaviorLabel = document.createElement('label');
+    behaviorLabel.innerText = 'Behavior';
 
-    const sidechatInput = document.createElement('input');
-    sidechatInput.type = 'checkbox';
-    sidechatInput.className = 'preset-sidechat';
-    sidechatInput.checked = Boolean(preset.sidechat);
+    const behaviorInput = document.createElement('select');
+    behaviorInput.className = 'preset-behavior';
+    [
+      ['default', 'Default'],
+      ['newTab', 'New tab'],
+      ['sidechat', 'Sidechat'],
+    ].forEach(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.innerText = label;
+      behaviorInput.append(option);
+    });
+    behaviorInput.value = getPresetBehavior(preset);
 
-    sidechatRow.append(sidechatLabel, sidechatInput);
-    row.append(header, formatInput, sidechatRow);
+    behaviorRow.append(behaviorLabel, behaviorInput);
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'remove-preset';
+    removeButton.setAttribute('aria-label', 'Delete preset');
+    removeButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>
+    `;
+    removeButton.addEventListener('click', () => {
+      if (!confirm('Delete this preset?')) {
+        return;
+      }
+
+      row.remove();
+      updateRemoveButtons();
+      updateCurrentPromptSummary();
+      scheduleSaveSettings();
+    });
+
+    const details = document.createElement('div');
+    details.className = 'preset-details';
+    details.append(formatInput, behaviorRow, removeButton);
+
+    row.append(header, details);
     presetList.append(row);
+
+    function setExpanded(isExpanded) {
+      row.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+      toggleButton.setAttribute('aria-label', isExpanded ? 'Collapse preset' : 'Expand preset');
+    }
+
+    function updatePresetSummary() {
+      const option = behaviorInput.options[behaviorInput.selectedIndex];
+      presetSummary.innerText = behaviorInput.value === 'default' ? '' : option.innerText;
+    }
+
+    function updatePresetEnabledState() {
+      row.classList.toggle('preset-disabled', !enabledInput.checked);
+    }
+
+    toggleButton.addEventListener('click', () => {
+      setExpanded(row.getAttribute('aria-expanded') !== 'true');
+    });
 
     nameInput.addEventListener('input', () => {
       updateCurrentPromptSummary();
@@ -168,7 +240,17 @@ document.addEventListener('DOMContentLoaded', () => {
       updateCurrentPromptSummary();
       scheduleSaveSettings();
     });
-    sidechatInput.addEventListener('change', scheduleSaveSettings);
+    behaviorInput.addEventListener('change', () => {
+      updatePresetSummary();
+      scheduleSaveSettings();
+    });
+    enabledInput.addEventListener('change', () => {
+      updatePresetEnabledState();
+      updateCurrentPromptSummary();
+      scheduleSaveSettings();
+    });
+    updatePresetSummary();
+    updatePresetEnabledState();
     updateRemoveButtons();
   }
 
@@ -177,7 +259,8 @@ document.addEventListener('DOMContentLoaded', () => {
       id: row.dataset.id || `preset-${index}`,
       name: row.querySelector('.preset-name').value.trim(),
       promptFormat: row.querySelector('.preset-format').value.trim(),
-      sidechat: row.querySelector('.preset-sidechat').checked,
+      behavior: getPresetBehavior({ behavior: row.querySelector('.preset-behavior').value }),
+      enabled: row.querySelector('.preset-enabled').checked,
     }));
   }
 
@@ -189,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateCurrentPromptSummary() {
-    const presets = readPresets().filter((preset) => preset.name || preset.promptFormat);
+    const presets = readPresets().filter((preset) => preset.enabled && (preset.name || preset.promptFormat));
     currentPromptFormat.innerText = presets
       .map((preset) => `${preset.name || 'Untitled'}: ${preset.promptFormat || 'No prompt format'}`)
       .join(' | ');
@@ -208,14 +291,28 @@ function getPromptPresets(data) {
       id: String(preset.id || `preset-${index}`),
       name: String(preset.name || '').trim(),
       promptFormat: String(preset.promptFormat || ''),
-      sidechat: Boolean(preset.sidechat),
+      behavior: getPresetBehavior(preset),
+      enabled: preset.enabled !== false,
     }));
   }
 
   return [{
     ...DEFAULT_PROMPT_PRESET,
     promptFormat: data.promptFormat || DEFAULT_PROMPT_PRESET.promptFormat,
+    enabled: true,
   }];
+}
+
+function getPresetBehavior(preset) {
+  if (PROMPT_BEHAVIORS.includes(preset && preset.behavior)) {
+    return preset.behavior;
+  }
+
+  return preset && preset.sidechat ? 'sidechat' : 'default';
+}
+
+function getGlobalPromptBehavior(behavior) {
+  return GLOBAL_PROMPT_BEHAVIORS.includes(behavior) ? behavior : DEFAULT_PROMPT_BEHAVIOR;
 }
 
 function createPresetId() {
