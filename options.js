@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name: '',
       promptFormat: 'Explain <prompt>',
       behavior: 'default',
-      enabled: true,
+      enabled: false,
     }, { expanded: true });
     scheduleSaveSettings();
   });
@@ -89,21 +89,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function saveSettings() {
     const promptPresets = readPresets();
-    const enabledPresets = promptPresets.filter((preset) => preset.enabled);
-    const invalidPreset = enabledPresets.find((preset) => !preset.name || !preset.promptFormat.includes('<prompt>'));
+    const storablePresets = promptPresets.filter((preset) => !preset.enabled || isUsablePreset(preset));
+    const enabledPresets = storablePresets.filter((preset) => preset.enabled);
 
-    if (invalidPreset) {
-      return;
-    }
-
-    if (!promptPresets.length) {
+    if (!storablePresets.length) {
       return;
     }
 
     chrome.storage.local.set(
       {
-        promptPresets,
-        promptFormat: (enabledPresets[0] || promptPresets[0]).promptFormat,
+        promptPresets: storablePresets,
+        promptFormat: (enabledPresets[0] || storablePresets[0]).promptFormat,
         chatProvider: getChatProviderId(chatProvider.value),
         defaultPromptBehavior: getGlobalPromptBehavior(defaultPromptBehavior.value),
         chatID: chatID.value.trim(),
@@ -135,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleButton.type = 'button';
     toggleButton.className = 'preset-chevron';
     toggleButton.setAttribute('aria-label', options.expanded ? 'Collapse preset' : 'Expand preset');
+    toggleButton.setAttribute('aria-expanded', options.expanded ? 'true' : 'false');
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
@@ -209,6 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const details = document.createElement('div');
     details.className = 'preset-details';
+    details.id = `preset-details-${row.dataset.id}`;
+    toggleButton.setAttribute('aria-controls', details.id);
     details.append(formatInput, behaviorRow, removeButton);
 
     row.append(header, details);
@@ -216,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setExpanded(isExpanded) {
       row.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+      toggleButton.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
       toggleButton.setAttribute('aria-label', isExpanded ? 'Collapse preset' : 'Expand preset');
     }
 
@@ -262,6 +262,10 @@ document.addEventListener('DOMContentLoaded', () => {
       behavior: getPresetBehavior({ behavior: row.querySelector('.preset-behavior').value }),
       enabled: row.querySelector('.preset-enabled').checked,
     }));
+  }
+
+  function isUsablePreset(preset) {
+    return Boolean(preset.name && preset.promptFormat.includes('<prompt>'));
   }
 
   function updateRemoveButtons() {

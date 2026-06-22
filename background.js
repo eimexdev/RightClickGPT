@@ -32,6 +32,7 @@ const DEFAULT_PROMPT_PRESET = {
   promptFormat: 'Explain <prompt>',
   behavior: 'default',
 };
+let menuItemBehaviorById = {};
 
 chrome.runtime.onInstalled.addListener(updateContextMenus);
 chrome.runtime.onStartup.addListener(updateContextMenus);
@@ -53,6 +54,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
 
+  if (menuItemBehaviorById[info.menuItemId] === 'sidechat') {
+    openSidechatPanel(tab);
+  }
+
   chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     const preset = findPresetForMenuItem(info.menuItemId, data);
     if (!preset) {
@@ -65,8 +70,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const configuredChatURL = normalizeChatURL(data.chatURL || data.chatID || '', provider.id);
 
     if (getEffectivePromptBehavior(preset, data.defaultPromptBehavior) === 'sidechat') {
-      openSidechatPanel(tab);
-      updateSidechatPrompt(formattedPrompt, tab, provider.id);
+      updateSidechatPrompt(formattedPrompt, tab, provider.id, configuredChatURL);
       return;
     }
 
@@ -87,19 +91,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 function updateContextMenus() {
   chrome.contextMenus.removeAll(() => {
-    chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatProvider'], (data) => {
+    chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatProvider', 'defaultPromptBehavior'], (data) => {
       const presets = getPromptPresets(data);
       const provider = getChatProvider(data.chatProvider);
+      const nextMenuItemBehaviorById = {};
       if (!presets.length) {
+        menuItemBehaviorById = nextMenuItemBehaviorById;
         return;
       }
 
       if (presets.length <= 1) {
+        nextMenuItemBehaviorById[getMenuItemId(presets[0])] = getEffectivePromptBehavior(presets[0], data.defaultPromptBehavior);
         chrome.contextMenus.create({
           id: getMenuItemId(presets[0]),
           title: presets[0].name || provider.menuTitle,
           contexts: ['selection'],
         });
+        menuItemBehaviorById = nextMenuItemBehaviorById;
         return;
       }
 
@@ -110,6 +118,7 @@ function updateContextMenus() {
       });
 
       presets.forEach((preset) => {
+        nextMenuItemBehaviorById[getMenuItemId(preset)] = getEffectivePromptBehavior(preset, data.defaultPromptBehavior);
         chrome.contextMenus.create({
           id: getMenuItemId(preset),
           parentId: ROOT_MENU_ID,
@@ -117,6 +126,7 @@ function updateContextMenus() {
           contexts: ['selection'],
         });
       });
+      menuItemBehaviorById = nextMenuItemBehaviorById;
     });
   });
 }
@@ -244,9 +254,9 @@ function openSidechatPanel(tab) {
   }
 }
 
-function updateSidechatPrompt(prompt, tab, providerId) {
+function updateSidechatPrompt(prompt, tab, providerId, configuredChatURL = '') {
   const provider = getChatProvider(providerId);
-  const chatURL = buildPromptQueryURL(prompt, provider.id);
+  const chatURL = configuredChatURL ? addPromptQueryParam(configuredChatURL, prompt) : buildPromptQueryURL(prompt, provider.id);
 
   chrome.storage.local.set({
     sidechatPrompt: prompt,
@@ -267,6 +277,12 @@ function setSidechatError(message) {
 function buildPromptQueryURL(prompt, providerId) {
   const provider = getChatProvider(providerId);
   const url = new URL(provider.id === 't3' ? T3_NEW_CHAT_URL : provider.homeURL);
+  url.searchParams.set('q', prompt);
+  return url.toString();
+}
+
+function addPromptQueryParam(rawURL, prompt) {
+  const url = new URL(rawURL);
   url.searchParams.set('q', prompt);
   return url.toString();
 }
