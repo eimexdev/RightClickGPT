@@ -45,6 +45,11 @@
       return false;
     }
 
+    if (typeof request.prompt !== 'string' || !request.prompt.trim()) {
+      sendResponse({ ok: false, error: 'The prompt was empty.' });
+      return false;
+    }
+
     const provider = request.provider || 'chatgpt';
     const task = request.action === 'sendToChatGPT' || request.action === 'sendToChatProvider'
       ? sendPromptToProvider(request.prompt, provider)
@@ -61,6 +66,15 @@
     return true;
   });
 
+  if (window.top === window && isSupportedProviderURL()) {
+    setTimeout(() => {
+      deliverPendingPromptForTab().catch((error) => {
+        const message = error && error.message ? error.message : String(error);
+        logToBackground('RightClickGPT pending prompt failed:', message);
+      });
+    }, 250);
+  }
+
   const framedPrompt = window.top !== window && isSupportedProviderURL() ? getPromptParamFromCurrentURL() : '';
   if (framedPrompt) {
     ensurePromptSubmitted(framedPrompt, getCurrentProviderId()).catch((error) => {
@@ -74,6 +88,30 @@
     await insertPrompt(composer, prompt);
 
     await submitPrompt(composer, provider);
+  }
+
+  async function deliverPendingPromptForTab() {
+    const response = await chrome.runtime.sendMessage({
+      action: 'consumePendingPrompt',
+    });
+    if (!response || !response.ok) {
+      if (response && response.retry) {
+        setTimeout(() => {
+          deliverPendingPromptForTab().catch((error) => {
+            const message = error && error.message ? error.message : String(error);
+            logToBackground('RightClickGPT pending prompt retry failed:', message);
+          });
+        }, 500);
+      }
+      return;
+    }
+
+    if (typeof response.prompt !== 'string') {
+      throw new Error('The pending prompt was invalid.');
+    }
+
+    await sendPromptToProvider(response.prompt, response.provider);
+    await chrome.runtime.sendMessage({ action: 'acknowledgePendingPrompt' });
   }
 
   async function ensurePromptSubmitted(prompt, provider) {

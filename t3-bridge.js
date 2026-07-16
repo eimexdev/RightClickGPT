@@ -1,4 +1,10 @@
 (() => {
+  // The Advanced build only needs this workaround inside its extension-owned
+  // side-panel frame. Never alter t3.chat's top-level browsing experience.
+  if (window.top === window) {
+    return;
+  }
+
   const NativeWebSocket = window.WebSocket;
   if (!NativeWebSocket || NativeWebSocket.__rightClickGPTT3Bridge) {
     return;

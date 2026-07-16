@@ -1,2 +1,7 @@
+dist/
+output/
+.playwright-cli/
 _metadata/generated_indexed_rulesets/
-output/playwright/sidechat-debug/
+*.pem
+*.crx
+.DS_Store

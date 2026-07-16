@@ -1,6 +1,9 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RightClickGPT Options</title>
   <style>
     :root {
       color-scheme: dark;
@@ -221,6 +224,31 @@
       flex: 1;
     }
 
+    .privacy-note {
+      margin: 18px 0 0;
+      padding: 12px;
+      border: 1px solid #46645c;
+      border-radius: 8px;
+      background: #1d312c;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .privacy-note a,
+    .privacy-note button {
+      color: #7dd3bc;
+    }
+
+    .privacy-note button {
+      width: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      text-decoration: underline;
+    }
+
     .hint,
     .current {
       margin: 6px 0 0;
@@ -342,6 +370,13 @@
       <button type="button" id="addPreset" class="secondary">Add preset</button>
       <button type="button" id="save">Save</button>
     </div>
+
+    <p class="privacy-note">
+      Text is sent only when you invoke a preset, directly to the provider selected above.
+      The extension developer does not receive it.
+      <a href="privacy.html" target="_blank">Privacy notice</a> ·
+      <button id="reviewConsent" type="button">Review consent</button>
+    </p>
   </main>
   <script src="options.js"></script>
 </body>

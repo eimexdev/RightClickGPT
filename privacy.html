@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RightClickGPT Privacy Notice</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; background: #1f1f1f; color: #f4f4f4; font: 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    h1, h2 { line-height: 1.25; }
+    p, li { color: #c5c5c5; }
+    a { color: #7dd3bc; }
+  </style>
+</head>
+<body>
+  <h1>RightClickGPT Privacy Notice</h1>
+  <p><strong>Effective July 15, 2026.</strong> RightClickGPT is an independent browser extension and is not affiliated with OpenAI or t3.chat.</p>
+
+  <h2>Data handled</h2>
+  <p>The extension handles webpage text that you explicitly select and send, your prompt preset text, your selected provider, an optional provider conversation URL, your existing-tab preference, and your privacy-consent choice.</p>
+
+  <h2>How data is used and shared</h2>
+  <p>When you invoke a context-menu action, the selected text and preset instructions are transferred directly to the provider you chose—ChatGPT or t3.chat—solely to submit your prompt. Those providers process the content under their own terms and privacy policies. The extension developer does not receive, sell, or use this content for advertising.</p>
+  <p>For normal-length T3 prompts, the extension uses t3.chat's native prompt URL. That URL, including the prompt, may appear in your local browser history. Longer T3 prompts and ChatGPT prompts are inserted into the provider composer instead.</p>
+
+  <h2>Local storage and retention</h2>
+  <p>Preferences and presets are stored locally through Chrome's extension storage and remain until you change them, clear extension data, or uninstall the extension. A prompt may be held for up to five minutes in Chrome's in-memory extension session storage while a provider tab finishes loading; it is deleted as soon as that tab retrieves it and is never written to disk by the extension. The Advanced GitHub build may also temporarily store the current side-panel prompt locally so the embedded panel can load it.</p>
+
+  <h2>Advanced GitHub build</h2>
+  <p>The separately packaged Advanced build can embed provider pages. It narrowly removes framing headers only for subframes initiated by the extension and applies a T3 session compatibility workaround only inside the extension's embedded t3.chat frame. Session identifiers are not sent to the extension developer or stored by the extension.</p>
+
+  <h2>Security and limited use</h2>
+  <p>Provider transfers use HTTPS. RightClickGPT's use of information is limited to its user-facing purpose of sending text you choose to your selected chat provider. It does not use analytics, advertising, tracking, or a developer-operated server.</p>
+
+  <h2>Contact and changes</h2>
+  <p>Questions can be filed through the project's GitHub issue tracker. Material changes to these practices will require an updated in-product disclosure and consent.</p>
+</body>
+</html>

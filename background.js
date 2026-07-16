@@ -1,7 +1,7 @@
 const CHATGPT_HOME_URL = 'https://chatgpt.com/';
 const T3_HOME_URL = 'https://t3.chat/';
 const T3_NEW_CHAT_URL = 'https://t3.chat/new';
-const CHATGPT_QUERY_URL_MAX_LENGTH = 1800;
+const T3_QUERY_URL_MAX_LENGTH = 1800;
 const CHATGPT_TAB_URLS = [
   'https://chatgpt.com/*',
   'https://chat.openai.com/*',
@@ -12,16 +12,24 @@ const DEFAULT_CHAT_PROVIDER = 'chatgpt';
 const DEFAULT_PROMPT_BEHAVIOR = 'newTab';
 const PROMPT_BEHAVIORS = ['default', 'newTab', 'sidechat'];
 const GLOBAL_PROMPT_BEHAVIORS = ['newTab', 'sidechat'];
+const CONSENT_VERSION = 1;
+const MANIFEST = chrome.runtime.getManifest();
+const SUPPORTS_SIDECHAT = Boolean(MANIFEST.side_panel && chrome.sidePanel);
+const ADVANCED_FRAME_RULE_IDS = [1001, 1002, 1003];
+const PENDING_PROMPT_PREFIX = 'pendingPrompt:';
+const PENDING_PROMPT_MAX_AGE_MS = 5 * 60 * 1000;
 const CHAT_PROVIDERS = {
   chatgpt: {
     homeURL: CHATGPT_HOME_URL,
     tabURLs: CHATGPT_TAB_URLS,
+    label: 'ChatGPT',
     menuTitle: 'Ask ChatGPT',
     existingTabLabel: 'Use existing ChatGPT tab',
   },
   t3: {
     homeURL: T3_HOME_URL,
     tabURLs: T3_TAB_URLS,
+    label: 't3.chat',
     menuTitle: 'Ask t3.chat',
     existingTabLabel: 'Use existing t3.chat tab',
   },
@@ -32,33 +40,103 @@ const DEFAULT_PROMPT_PRESET = {
   promptFormat: 'Explain <prompt>',
   behavior: 'default',
 };
-let menuItemBehaviorById = {};
 
-chrome.runtime.onInstalled.addListener(updateContextMenus);
-chrome.runtime.onStartup.addListener(updateContextMenus);
+chrome.runtime.onInstalled.addListener(async () => {
+  await clearExpiredPendingPrompts();
+  await configureAdvancedFrameRules();
+  const consent = await chrome.storage.local.get(['dataConsentVersion']);
+  if (consent.dataConsentVersion !== CONSENT_VERSION) {
+    await chrome.contextMenus.removeAll();
+    await chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+    return;
+  }
+
+  updateContextMenus();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  await clearExpiredPendingPrompts();
+  await configureAdvancedFrameRules();
+  updateContextMenus();
+});
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && (changes.promptPresets || changes.promptFormat || changes.chatProvider || changes.defaultPromptBehavior)) {
+  if (areaName === 'local' && (
+    changes.promptPresets ||
+    changes.promptFormat ||
+    changes.chatProvider ||
+    changes.defaultPromptBehavior ||
+    changes.dataConsentVersion
+  )) {
     updateContextMenus();
   }
 });
 
-chrome.runtime.onMessage.addListener((request) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'logToBackground') {
     console.log.apply(null, request.data);
+    return false;
   }
+
+  if (request.action === 'enableT3SidePanelBridge') {
+    if (!SUPPORTS_SIDECHAT || !chrome.scripting || !isValidT3SidePanelFrame(sender)) {
+      sendResponse({ ok: false });
+      return false;
+    }
+
+    chrome.scripting.executeScript({
+      target: {
+        tabId: sender.tab.id,
+        frameIds: [sender.frameId],
+      },
+      files: ['t3-bridge.js'],
+      world: 'MAIN',
+    }).then(
+      () => sendResponse({ ok: true }),
+      (error) => {
+        console.error('Unable to enable the T3 side-panel bridge.', error);
+        sendResponse({ ok: false });
+      },
+    );
+    return true;
+  }
+
+  if (request.action === 'consumePendingPrompt') {
+    getPendingPromptForTab(sender).then(sendResponse);
+    return true;
+  }
+
+  if (request.action === 'acknowledgePendingPrompt') {
+    acknowledgePendingPrompt(sender).then(sendResponse);
+    return true;
+  }
+
+  return false;
 });
+
+function isValidT3SidePanelFrame(sender) {
+  if (!sender.tab || !Number.isInteger(sender.tab.id) || !Number.isInteger(sender.frameId) || sender.frameId <= 0) {
+    return false;
+  }
+
+  try {
+    return new URL(sender.url).hostname === 't3.chat';
+  } catch (error) {
+    return false;
+  }
+}
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!info.selectionText) {
     return;
   }
 
-  if (menuItemBehaviorById[info.menuItemId] === 'sidechat') {
-    openSidechatPanel(tab);
-  }
+  chrome.storage.local.get(['dataConsentVersion', 'promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
+    if (data.dataConsentVersion !== CONSENT_VERSION) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+      return;
+    }
 
-  chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     const preset = findPresetForMenuItem(info.menuItemId, data);
     if (!preset) {
       return;
@@ -70,6 +148,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const configuredChatURL = normalizeChatURL(data.chatURL || data.chatID || '', provider.id);
 
     if (getEffectivePromptBehavior(preset, data.defaultPromptBehavior) === 'sidechat') {
+      openSidechatPanel(tab);
       updateSidechatPrompt(formattedPrompt, tab, provider.id, configuredChatURL);
       return;
     }
@@ -91,23 +170,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 function updateContextMenus() {
   chrome.contextMenus.removeAll(() => {
-    chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatProvider', 'defaultPromptBehavior'], (data) => {
+    chrome.storage.local.get(['dataConsentVersion', 'promptPresets', 'promptFormat', 'chatProvider', 'defaultPromptBehavior'], (data) => {
+      if (data.dataConsentVersion !== CONSENT_VERSION) {
+        return;
+      }
+
       const presets = getPromptPresets(data);
       const provider = getChatProvider(data.chatProvider);
-      const nextMenuItemBehaviorById = {};
       if (!presets.length) {
-        menuItemBehaviorById = nextMenuItemBehaviorById;
         return;
       }
 
       if (presets.length <= 1) {
-        nextMenuItemBehaviorById[getMenuItemId(presets[0])] = getEffectivePromptBehavior(presets[0], data.defaultPromptBehavior);
         chrome.contextMenus.create({
           id: getMenuItemId(presets[0]),
-          title: presets[0].name || provider.menuTitle,
+          title: `${presets[0].name || 'Send selection'} → ${provider.label}`,
           contexts: ['selection'],
         });
-        menuItemBehaviorById = nextMenuItemBehaviorById;
         return;
       }
 
@@ -118,7 +197,6 @@ function updateContextMenus() {
       });
 
       presets.forEach((preset) => {
-        nextMenuItemBehaviorById[getMenuItemId(preset)] = getEffectivePromptBehavior(preset, data.defaultPromptBehavior);
         chrome.contextMenus.create({
           id: getMenuItemId(preset),
           parentId: ROOT_MENU_ID,
@@ -126,7 +204,6 @@ function updateContextMenus() {
           contexts: ['selection'],
         });
       });
-      menuItemBehaviorById = nextMenuItemBehaviorById;
     });
   });
 }
@@ -178,13 +255,17 @@ function getPresetIdFromMenuItem(menuItemId) {
 
 function getPresetBehavior(preset) {
   if (PROMPT_BEHAVIORS.includes(preset && preset.behavior)) {
-    return preset.behavior;
+    return preset.behavior === 'sidechat' && !SUPPORTS_SIDECHAT ? 'newTab' : preset.behavior;
   }
 
-  return preset && preset.sidechat ? 'sidechat' : 'default';
+  return preset && preset.sidechat && SUPPORTS_SIDECHAT ? 'sidechat' : 'default';
 }
 
 function getGlobalPromptBehavior(behavior) {
+  if (behavior === 'sidechat' && !SUPPORTS_SIDECHAT) {
+    return DEFAULT_PROMPT_BEHAVIOR;
+  }
+
   return GLOBAL_PROMPT_BEHAVIORS.includes(behavior) ? behavior : DEFAULT_PROMPT_BEHAVIOR;
 }
 
@@ -207,7 +288,7 @@ function sendToExistingChatTab(prompt, providerId, callback) {
 
     const existingTab = tabs[0];
     chrome.tabs.update(existingTab.id, { active: true }, () => {
-      injectPromptIntoTab(existingTab.id, { action: 'sendToChatProvider', provider: provider.id, prompt });
+      sendPromptMessage(existingTab.id, { action: 'sendToChatProvider', provider: provider.id, prompt });
       callback(true);
     });
   });
@@ -216,26 +297,28 @@ function sendToExistingChatTab(prompt, providerId, callback) {
 function openPromptTarget(configuredChatURL, prompt, providerId) {
   const provider = getChatProvider(providerId);
   if (configuredChatURL) {
-    createNewTabAndInject(configuredChatURL, prompt, provider.id);
+    openTabWithPendingPrompt(configuredChatURL, prompt, provider.id);
     return;
   }
 
-  const queryURL = buildPromptQueryURL(prompt, provider.id);
   if (provider.id === 't3') {
-    chrome.tabs.create({ url: queryURL });
+    const queryURL = buildPromptQueryURL(prompt, provider.id);
+    if (queryURL.length <= T3_QUERY_URL_MAX_LENGTH) {
+      chrome.tabs.create({ url: queryURL });
+      return;
+    }
+
+    // T3 redirects /new during hydration. Open the stable home route for the
+    // in-memory handoff used by long prompts.
+    openTabWithPendingPrompt(T3_HOME_URL, prompt, provider.id);
     return;
   }
 
-  if (queryURL.length <= CHATGPT_QUERY_URL_MAX_LENGTH) {
-    createNewTabAndEnsureQueryPromptSubmitted(queryURL, prompt, provider.id);
-    return;
-  }
-
-  createNewTabAndInject(provider.homeURL, prompt, provider.id);
+  openTabWithPendingPrompt(provider.homeURL, prompt, provider.id);
 }
 
 function openSidechatPanel(tab) {
-  if (!chrome.sidePanel || !tab || !tab.id) {
+  if (!chrome.sidePanel || !tab || !Number.isInteger(tab.id)) {
     setSidechatError('Chrome side panel is not available for this page.');
     return;
   }
@@ -262,7 +345,7 @@ function updateSidechatPrompt(prompt, tab, providerId, configuredChatURL = '') {
     sidechatPrompt: prompt,
     sidechatURL: chatURL,
     sidechatProvider: provider.id,
-    sidechatError: chrome.sidePanel && tab && tab.id ? '' : 'Chrome side panel is not available for this page.',
+    sidechatError: chrome.sidePanel && tab && Number.isInteger(tab.id) ? '' : 'Chrome side panel is not available for this page.',
     sidechatUpdatedAt: Date.now(),
   });
 }
@@ -321,51 +404,137 @@ function isProviderHost(hostname, providerId) {
   return hostname === 'chatgpt.com' || hostname === 'chat.openai.com';
 }
 
-function createNewTabAndInject(url, prompt, providerId) {
-  createNewTabAndSendMessage(url, { action: 'sendToChatProvider', provider: getChatProvider(providerId).id, prompt });
-}
+function sendPromptMessage(tabId, message) {
+  chrome.tabs.sendMessage(tabId, message, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError.message);
+      return;
+    }
 
-function createNewTabAndEnsureQueryPromptSubmitted(url, prompt, providerId) {
-  createNewTabAndSendMessage(url, { action: 'ensureChatProviderPromptSubmitted', provider: getChatProvider(providerId).id, prompt });
-}
-
-function createNewTabAndSendMessage(url, message) {
-  chrome.tabs.create({ url }, (newTab) => {
-    const listener = (tabId, changeInfo) => {
-      if (tabId !== newTab.id || changeInfo.status !== 'complete') {
-        return;
-      }
-
-      chrome.tabs.onUpdated.removeListener(listener);
-      injectPromptIntoTab(tabId, message);
-    };
-
-    chrome.tabs.onUpdated.addListener(listener);
+    if (!response || !response.ok) {
+      console.error(response && response.error ? response.error : 'Unable to send prompt to the selected provider.');
+    }
   });
 }
 
-function injectPromptIntoTab(tabId, message) {
-  chrome.scripting.executeScript(
-    {
-      target: { tabId },
-      files: ['content.js'],
+async function openTabWithPendingPrompt(rawURL, prompt, providerId) {
+  await clearExpiredPendingPrompts();
+  const provider = getChatProvider(providerId);
+  const tab = await chrome.tabs.create({ url: 'about:blank', active: true });
+  const storageKey = `${PENDING_PROMPT_PREFIX}${tab.id}`;
+
+  await chrome.storage.session.set({
+    [storageKey]: {
+      prompt,
+      providerId: provider.id,
+      createdAt: Date.now(),
     },
-    () => {
-      if (chrome.runtime.lastError) {
-        console.error(chrome.runtime.lastError.message);
-        return;
-      }
+  });
+  await chrome.tabs.update(tab.id, { url: rawURL });
+}
 
-      chrome.tabs.sendMessage(tabId, message, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error(chrome.runtime.lastError.message);
-          return;
-        }
+async function getPendingPromptForTab(sender) {
+  if (!isValidTopLevelProviderFrame(sender)) {
+    return { ok: false };
+  }
 
-        if (!response || !response.ok) {
-          console.error(response && response.error ? response.error : 'Unable to send prompt to ChatGPT.');
-        }
-      });
-    }
-  );
+  const storageKey = `${PENDING_PROMPT_PREFIX}${sender.tab.id}`;
+  const stored = await chrome.storage.session.get(storageKey);
+  const pending = stored[storageKey];
+  if (!pending || Date.now() - pending.createdAt > PENDING_PROMPT_MAX_AGE_MS) {
+    await chrome.storage.session.remove(storageKey);
+    return { ok: false };
+  }
+
+  const senderURL = new URL(sender.url);
+  const senderHost = senderURL.hostname;
+  if (!isProviderHost(senderHost, pending.providerId)) {
+    return { ok: false };
+  }
+
+  if (
+    pending.providerId === 't3' &&
+    (senderURL.pathname === '/new' || Date.now() - pending.createdAt < 5000)
+  ) {
+    return { ok: false, retry: true };
+  }
+
+  return {
+    ok: true,
+    prompt: pending.prompt,
+    provider: pending.providerId,
+  };
+}
+
+async function acknowledgePendingPrompt(sender) {
+  if (!isValidTopLevelProviderFrame(sender)) {
+    return { ok: false };
+  }
+
+  const storageKey = `${PENDING_PROMPT_PREFIX}${sender.tab.id}`;
+  await chrome.storage.session.remove(storageKey);
+  return { ok: true };
+}
+
+function isValidTopLevelProviderFrame(sender) {
+  if (!sender.tab || !Number.isInteger(sender.tab.id) || sender.frameId !== 0 || !sender.url) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(sender.url).hostname;
+    return hostname === 'chatgpt.com' || hostname === 'chat.openai.com' || hostname === 't3.chat';
+  } catch (error) {
+    return false;
+  }
+}
+
+async function clearExpiredPendingPrompts() {
+  const stored = await chrome.storage.session.get();
+  const now = Date.now();
+  const expiredKeys = Object.entries(stored)
+    .filter(([key, value]) => (
+      key.startsWith(PENDING_PROMPT_PREFIX) &&
+      (!value || !value.createdAt || now - value.createdAt > PENDING_PROMPT_MAX_AGE_MS)
+    ))
+    .map(([key]) => key);
+
+  if (expiredKeys.length) {
+    await chrome.storage.session.remove(expiredKeys);
+  }
+}
+
+async function configureAdvancedFrameRules() {
+  if (!SUPPORTS_SIDECHAT || !chrome.declarativeNetRequest) {
+    return;
+  }
+
+  const responseHeaders = [
+    { header: 'content-security-policy', operation: 'remove' },
+    { header: 'content-security-policy-report-only', operation: 'remove' },
+    { header: 'x-frame-options', operation: 'remove' },
+  ];
+  const providerDomains = ['chatgpt.com', 'chat.openai.com', 't3.chat'];
+  const addRules = providerDomains.map((requestDomain, index) => ({
+    id: ADVANCED_FRAME_RULE_IDS[index],
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      responseHeaders,
+    },
+    condition: {
+      initiatorDomains: [chrome.runtime.id],
+      requestDomains: [requestDomain],
+      resourceTypes: ['sub_frame'],
+    },
+  }));
+
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: ADVANCED_FRAME_RULE_IDS,
+      addRules,
+    });
+  } catch (error) {
+    console.error('Unable to configure Advanced side-panel frame rules.', error);
+  }
 }

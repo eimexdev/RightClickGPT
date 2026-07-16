@@ -6,6 +6,19 @@ const status = document.getElementById('status');
 
 loadSidechat();
 
+window.addEventListener('message', (event) => {
+  if (
+    event.source !== chatFrame.contentWindow ||
+    event.origin !== 'https://t3.chat' ||
+    !event.data ||
+    event.data.type !== 'rightclickgpt:t3-bridge-request'
+  ) {
+    return;
+  }
+
+  event.source.postMessage({ type: 'rightclickgpt:t3-bridge-approved' }, event.origin);
+});
+
 reloadFrame.addEventListener('click', () => {
   try {
     chatFrame.contentWindow.location.reload();
