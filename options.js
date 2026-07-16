@@ -8,6 +8,7 @@ const DEFAULT_CHAT_PROVIDER = 'chatgpt';
 const DEFAULT_PROMPT_BEHAVIOR = 'newTab';
 const PROMPT_BEHAVIORS = ['default', 'newTab', 'sidechat'];
 const GLOBAL_PROMPT_BEHAVIORS = ['newTab', 'sidechat'];
+const SUPPORTS_SIDECHAT = Boolean(chrome.runtime.getManifest().side_panel && chrome.sidePanel);
 const CHAT_PROVIDERS = {
   chatgpt: {
     chatTargetPlaceholder: 'https://chatgpt.com/c/...',
@@ -30,8 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentChatID = document.getElementById('currentChatID');
   const focusExistingTab = document.getElementById('focusExistingTab');
   const focusExistingTabLabel = document.getElementById('focusExistingTabLabel');
+  const reviewConsent = document.getElementById('reviewConsent');
   let saveTimeout;
   let isLoadingSettings = true;
+
+  if (!SUPPORTS_SIDECHAT) {
+    defaultPromptBehavior.querySelector('option[value="sidechat"]')?.remove();
+  }
 
   chrome.storage.local.get(['promptPresets', 'promptFormat', 'chatID', 'chatURL', 'chatProvider', 'focusExistingTab', 'defaultPromptBehavior'], (data) => {
     renderPresets(getPromptPresets(data));
@@ -62,6 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
   defaultPromptBehavior.addEventListener('change', scheduleSaveSettings);
   chatID.addEventListener('input', scheduleSaveSettings);
   focusExistingTab.addEventListener('change', scheduleSaveSettings);
+  reviewConsent.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+  });
 
   if (saveButton) {
     saveButton.hidden = true;
@@ -167,11 +176,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const behaviorInput = document.createElement('select');
     behaviorInput.className = 'preset-behavior';
-    [
+    const behaviorOptions = [
       ['default', 'Default'],
       ['newTab', 'New tab'],
-      ['sidechat', 'Sidechat'],
-    ].forEach(([value, label]) => {
+    ];
+    if (SUPPORTS_SIDECHAT) {
+      behaviorOptions.push(['sidechat', 'Sidechat']);
+    }
+    behaviorOptions.forEach(([value, label]) => {
       const option = document.createElement('option');
       option.value = value;
       option.innerText = label;
@@ -309,13 +321,17 @@ function getPromptPresets(data) {
 
 function getPresetBehavior(preset) {
   if (PROMPT_BEHAVIORS.includes(preset && preset.behavior)) {
-    return preset.behavior;
+    return preset.behavior === 'sidechat' && !SUPPORTS_SIDECHAT ? 'newTab' : preset.behavior;
   }
 
-  return preset && preset.sidechat ? 'sidechat' : 'default';
+  return preset && preset.sidechat && SUPPORTS_SIDECHAT ? 'sidechat' : 'default';
 }
 
 function getGlobalPromptBehavior(behavior) {
+  if (behavior === 'sidechat' && !SUPPORTS_SIDECHAT) {
+    return DEFAULT_PROMPT_BEHAVIOR;
+  }
+
   return GLOBAL_PROMPT_BEHAVIORS.includes(behavior) ? behavior : DEFAULT_PROMPT_BEHAVIOR;
 }
 

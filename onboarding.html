@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enable RightClickGPT</title>
+  <style>
+    :root { color-scheme: dark; --bg: #171717; --panel: #242424; --field: #303030; --text: #f5f5f5; --muted: #b4b4b4; --accent: #10a37f; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(620px, 100%); padding: 30px; border: 1px solid #3a3a3a; border-radius: 16px; background: var(--panel); box-shadow: 0 20px 60px rgb(0 0 0 / 25%); }
+    h1 { margin: 0 0 10px; font-size: 26px; }
+    h2 { margin: 24px 0 8px; font-size: 16px; }
+    p, li { color: var(--muted); line-height: 1.55; }
+    ul { padding-left: 22px; }
+    .disclosure { padding: 16px; border: 1px solid #46645c; border-radius: 10px; background: #1d312c; }
+    .disclosure strong { color: var(--text); }
+    .consent { display: flex; gap: 12px; align-items: flex-start; margin: 22px 0; padding: 14px; border-radius: 10px; background: var(--field); cursor: pointer; }
+    .consent input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+    .consent span { line-height: 1.45; }
+    .actions { display: flex; align-items: center; gap: 14px; }
+    button { padding: 11px 16px; border: 0; border-radius: 9px; background: var(--accent); color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.secondary { background: #3a3a3a; color: var(--text); }
+    a { color: #7dd3bc; }
+    #status { margin: 0; }
+    .advanced { display: none; }
+    body[data-advanced="true"] .advanced { display: list-item; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Before you enable RightClickGPT</h1>
+    <p>RightClickGPT is an independent extension and is not affiliated with, endorsed by, or produced by OpenAI or t3.chat.</p>
+
+    <div class="disclosure">
+      <strong>When you choose a RightClickGPT context-menu action, the selected webpage text and your preset instructions are sent directly to the chat provider you selected: ChatGPT or t3.chat.</strong>
+      <p>The extension developer does not receive this content. Your provider processes it under its own terms and privacy policy.</p>
+    </div>
+
+    <h2>What stays on this device</h2>
+    <ul>
+      <li>Your prompt presets, provider choice, target conversation, and tab preference are stored in Chrome's local extension storage.</li>
+      <li>A prompt may be held in Chrome's in-memory session storage while its provider tab finishes loading. New-tab handoffs expire after five minutes; Advanced Sidechat retains only its latest prompt-bearing URL until it is replaced, cleared, or the browser exits.</li>
+      <li>Neither build uses analytics, advertising, tracking, or a developer-operated server.</li>
+      <li class="advanced">The Advanced GitHub build can embed provider pages in a side panel and applies a T3 session compatibility workaround only inside that embedded frame.</li>
+    </ul>
+
+    <label class="consent">
+      <input id="consent" type="checkbox">
+      <span>I understand and agree that text I explicitly send will be transferred to my selected provider.</span>
+    </label>
+
+    <div class="actions">
+      <button id="enable" type="button" disabled>Agree and enable</button>
+      <a href="privacy.html" target="_blank">Read the full privacy notice</a>
+      <button id="clearData" class="secondary" type="button">Clear local data</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </div>
+  </main>
+  <script src="onboarding.js"></script>
+</body>
+</html>

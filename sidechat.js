@@ -6,6 +6,19 @@ const status = document.getElementById('status');
 
 loadSidechat();
 
+window.addEventListener('message', (event) => {
+  if (
+    event.source !== chatFrame.contentWindow ||
+    event.origin !== 'https://t3.chat' ||
+    !event.data ||
+    event.data.type !== 'rightclickgpt:t3-bridge-request'
+  ) {
+    return;
+  }
+
+  event.source.postMessage({ type: 'rightclickgpt:t3-bridge-approved' }, event.origin);
+});
+
 reloadFrame.addEventListener('click', () => {
   try {
     chatFrame.contentWindow.location.reload();
@@ -16,13 +29,13 @@ reloadFrame.addEventListener('click', () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && (changes.sidechatURL || changes.sidechatError || changes.sidechatUpdatedAt)) {
+  if (areaName === 'session' && (changes.sidechatURL || changes.sidechatError || changes.sidechatUpdatedAt)) {
     loadSidechat();
   }
 });
 
 function loadSidechat() {
-  chrome.storage.local.get(['sidechatURL', 'sidechatError'], (data) => {
+  chrome.storage.session.get(['sidechatURL', 'sidechatError'], (data) => {
     const sidechatURL = data.sidechatURL || '';
     const sidechatError = data.sidechatError || '';
 
