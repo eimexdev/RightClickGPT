@@ -22,6 +22,7 @@ This independent extension is not affiliated with, endorsed by, or produced by O
 
 - `contextMenus`: Adds the user-invoked action for selected webpage text.
 - `storage`: Stores privacy consent, presets, provider choice, conversation target, and tab preference locally.
+- `alarms`: Enforces deletion of an in-memory prompt handoff after five minutes if provider submission never completes.
 - `https://chatgpt.com/*` and `https://chat.openai.com/*`: Inserts and submits the user-approved prompt in ChatGPT and can locate an already-open ChatGPT tab.
 - `https://t3.chat/*`: Inserts and submits the user-approved prompt in T3 and can locate an already-open T3 tab.
 

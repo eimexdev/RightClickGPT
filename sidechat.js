@@ -29,13 +29,13 @@ reloadFrame.addEventListener('click', () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && (changes.sidechatURL || changes.sidechatError || changes.sidechatUpdatedAt)) {
+  if (areaName === 'session' && (changes.sidechatURL || changes.sidechatError || changes.sidechatUpdatedAt)) {
     loadSidechat();
   }
 });
 
 function loadSidechat() {
-  chrome.storage.local.get(['sidechatURL', 'sidechatError'], (data) => {
+  chrome.storage.session.get(['sidechatURL', 'sidechatError'], (data) => {
     const sidechatURL = data.sidechatURL || '';
     const sidechatError = data.sidechatError || '';
 

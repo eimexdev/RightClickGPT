@@ -17,7 +17,9 @@ const MANIFEST = chrome.runtime.getManifest();
 const SUPPORTS_SIDECHAT = Boolean(MANIFEST.side_panel && chrome.sidePanel);
 const ADVANCED_FRAME_RULE_IDS = [1001, 1002, 1003];
 const PENDING_PROMPT_PREFIX = 'pendingPrompt:';
+const PENDING_PROMPT_EXPIRY_ALARM_PREFIX = 'pendingPromptExpiry:';
 const PENDING_PROMPT_MAX_AGE_MS = 5 * 60 * 1000;
+const LEGACY_SIDECHAT_LOCAL_KEYS = ['sidechatPrompt', 'sidechatURL', 'sidechatError', 'sidechatUpdatedAt'];
 const CHAT_PROVIDERS = {
   chatgpt: {
     homeURL: CHATGPT_HOME_URL,
@@ -43,6 +45,7 @@ const DEFAULT_PROMPT_PRESET = {
 
 chrome.runtime.onInstalled.addListener(async () => {
   await clearExpiredPendingPrompts();
+  await chrome.storage.local.remove(LEGACY_SIDECHAT_LOCAL_KEYS);
   await configureAdvancedFrameRules();
   const consent = await chrome.storage.local.get(['dataConsentVersion']);
   if (consent.dataConsentVersion !== CONSENT_VERSION) {
@@ -56,8 +59,23 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   await clearExpiredPendingPrompts();
+  await chrome.storage.local.remove(LEGACY_SIDECHAT_LOCAL_KEYS);
   await configureAdvancedFrameRules();
   updateContextMenus();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (!alarm.name.startsWith(PENDING_PROMPT_EXPIRY_ALARM_PREFIX)) {
+    return;
+  }
+
+  const tabId = alarm.name.slice(PENDING_PROMPT_EXPIRY_ALARM_PREFIX.length);
+  chrome.storage.session.remove(`${PENDING_PROMPT_PREFIX}${tabId}`);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.storage.session.remove(`${PENDING_PROMPT_PREFIX}${tabId}`);
+  chrome.alarms.clear(`${PENDING_PROMPT_EXPIRY_ALARM_PREFIX}${tabId}`);
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -288,8 +306,17 @@ function sendToExistingChatTab(prompt, providerId, callback) {
 
     const existingTab = tabs[0];
     chrome.tabs.update(existingTab.id, { active: true }, () => {
-      sendPromptMessage(existingTab.id, { action: 'sendToChatProvider', provider: provider.id, prompt });
-      callback(true);
+      if (chrome.runtime.lastError) {
+        console.error(chrome.runtime.lastError.message);
+        callback(false);
+        return;
+      }
+
+      sendPromptMessage(
+        existingTab.id,
+        { action: 'sendToChatProvider', provider: provider.id, prompt },
+        callback,
+      );
     });
   });
 }
@@ -341,8 +368,7 @@ function updateSidechatPrompt(prompt, tab, providerId, configuredChatURL = '') {
   const provider = getChatProvider(providerId);
   const chatURL = configuredChatURL ? addPromptQueryParam(configuredChatURL, prompt) : buildPromptQueryURL(prompt, provider.id);
 
-  chrome.storage.local.set({
-    sidechatPrompt: prompt,
+  chrome.storage.session.set({
     sidechatURL: chatURL,
     sidechatProvider: provider.id,
     sidechatError: chrome.sidePanel && tab && Number.isInteger(tab.id) ? '' : 'Chrome side panel is not available for this page.',
@@ -351,7 +377,7 @@ function updateSidechatPrompt(prompt, tab, providerId, configuredChatURL = '') {
 }
 
 function setSidechatError(message) {
-  chrome.storage.local.set({
+  chrome.storage.session.set({
     sidechatError: message,
     sidechatUpdatedAt: Date.now(),
   });
@@ -404,16 +430,21 @@ function isProviderHost(hostname, providerId) {
   return hostname === 'chatgpt.com' || hostname === 'chat.openai.com';
 }
 
-function sendPromptMessage(tabId, message) {
+function sendPromptMessage(tabId, message, callback = () => {}) {
   chrome.tabs.sendMessage(tabId, message, (response) => {
     if (chrome.runtime.lastError) {
       console.error(chrome.runtime.lastError.message);
+      callback(false);
       return;
     }
 
     if (!response || !response.ok) {
       console.error(response && response.error ? response.error : 'Unable to send prompt to the selected provider.');
+      callback(false);
+      return;
     }
+
+    callback(true);
   });
 }
 
@@ -430,6 +461,9 @@ async function openTabWithPendingPrompt(rawURL, prompt, providerId) {
       createdAt: Date.now(),
     },
   });
+  await chrome.alarms.create(`${PENDING_PROMPT_EXPIRY_ALARM_PREFIX}${tab.id}`, {
+    when: Date.now() + PENDING_PROMPT_MAX_AGE_MS,
+  });
   await chrome.tabs.update(tab.id, { url: rawURL });
 }
 
@@ -443,6 +477,7 @@ async function getPendingPromptForTab(sender) {
   const pending = stored[storageKey];
   if (!pending || Date.now() - pending.createdAt > PENDING_PROMPT_MAX_AGE_MS) {
     await chrome.storage.session.remove(storageKey);
+    await chrome.alarms.clear(`${PENDING_PROMPT_EXPIRY_ALARM_PREFIX}${sender.tab.id}`);
     return { ok: false };
   }
 
@@ -473,6 +508,7 @@ async function acknowledgePendingPrompt(sender) {
 
   const storageKey = `${PENDING_PROMPT_PREFIX}${sender.tab.id}`;
   await chrome.storage.session.remove(storageKey);
+  await chrome.alarms.clear(`${PENDING_PROMPT_EXPIRY_ALARM_PREFIX}${sender.tab.id}`);
   return { ok: true };
 }
 
@@ -501,6 +537,9 @@ async function clearExpiredPendingPrompts() {
 
   if (expiredKeys.length) {
     await chrome.storage.session.remove(expiredKeys);
+    await Promise.all(expiredKeys.map((key) => (
+      chrome.alarms.clear(`${PENDING_PROMPT_EXPIRY_ALARM_PREFIX}${key.slice(PENDING_PROMPT_PREFIX.length)}`)
+    )));
   }
 }
 

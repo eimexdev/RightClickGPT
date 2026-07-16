@@ -41,7 +41,7 @@
     <h2>What stays on this device</h2>
     <ul>
       <li>Your prompt presets, provider choice, target conversation, and tab preference are stored in Chrome's local extension storage.</li>
-      <li>A prompt may be held briefly in Chrome's in-memory session storage while its provider tab finishes loading, then it is deleted.</li>
+      <li>A prompt may be held in Chrome's in-memory session storage while its provider tab finishes loading. New-tab handoffs expire after five minutes; Advanced Sidechat retains only its latest prompt-bearing URL until it is replaced, cleared, or the browser exits.</li>
       <li>Neither build uses analytics, advertising, tracking, or a developer-operated server.</li>
       <li class="advanced">The Advanced GitHub build can embed provider pages in a side panel and applies a T3 session compatibility workaround only inside that embedded frame.</li>
     </ul>

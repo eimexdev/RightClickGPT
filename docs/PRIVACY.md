@@ -16,7 +16,7 @@ For normal-length T3 prompts, the extension uses t3.chat's native prompt URL. Th
 
 ## Local storage and retention
 
-Preferences and presets are stored locally through Chrome's extension storage and remain until you change them, clear extension data, or uninstall the extension. A prompt may be held for up to five minutes in Chrome's in-memory extension session storage while a provider tab finishes loading; it is deleted as soon as that tab retrieves it and is never written to disk by the extension. The Advanced GitHub build may also temporarily store the current side-panel prompt locally so the embedded panel can load it.
+Preferences and presets are stored locally through Chrome's extension storage and remain until you change them, clear extension data, or uninstall the extension. A new-tab prompt may be held for up to five minutes in Chrome's in-memory extension session storage while its provider tab loads; it is deleted after successful submission, when the tab closes, or when the five-minute expiry alarm runs. The Advanced GitHub build keeps its latest prompt-bearing side-panel URL in the same in-memory session storage until it is replaced, cleared, or the browser exits. The extension does not write selected webpage text to disk.
 
 ## Advanced GitHub build
 
